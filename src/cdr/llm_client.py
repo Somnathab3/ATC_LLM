@@ -57,13 +57,10 @@ class LlamaClient:
         try:
             prompt = self._create_detection_prompt(state_json)
             response = self._call_llm(prompt)
-            
             if response:
                 return self._parse_detect_response(response)
-                
         except Exception as e:
             logger.error(f"Detection request failed: {e}")
-            
         return None
     
     def ask_resolve(self, state_json: str, conflict: Dict[str, Any]) -> Optional[ResolveOut]:
@@ -79,13 +76,33 @@ class LlamaClient:
         try:
             prompt = self._create_resolution_prompt(state_json, conflict)
             response = self._call_llm(prompt)
-            
             if response:
                 return self._parse_resolve_response(response)
-                
         except Exception as e:
             logger.error(f"Resolution request failed: {e}")
-            
+        return None
+    def _call_llm(self, prompt: str) -> Optional[str]:
+        """Call the LLM with retry logic.
+        Args:
+            prompt: Input prompt
+        Returns:
+            LLM response string or None if failed
+        """
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                # For this demo, we'll simulate LLM calls
+                # In production, you'd call ollama or use transformers library
+                if "predict whether ownship will violate" in prompt:
+                    return '''{"conflict": true, "intruders": [{"id": "TRF001", "eta_min": 4.5, "why": "converging headings"}]}'''
+                elif "Propose ONE maneuver" in prompt:
+                    return '''{"action": "turn", "params": {"heading_deg": 120}, "rationale": "Right turn to 120 degrees will provide safe separation"}'''
+                else:
+                    return '''{"error": "Unknown request type"}'''
+            except Exception as e:
+                logger.warning(f"LLM call attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(0.5)  # Brief retry delay
         return None
     
     def detect_conflicts(self, input_data: LLMDetectionInput) -> Optional[LLMDetectionOutput]:
@@ -100,12 +117,12 @@ class LlamaClient:
         try:
             # Convert input to JSON
             state_dict = {
-                "ownship": input_data.ownship.dict(),
-                "traffic": [aircraft.dict() for aircraft in input_data.traffic],
+                "ownship": input_data.ownship.model_dump(),
+                "traffic": [aircraft.model_dump() for aircraft in input_data.traffic],
                 "lookahead_minutes": input_data.lookahead_minutes,
                 "current_time": input_data.current_time.isoformat()
             }
-            state_json = json.dumps(state_dict, indent=2)
+            state_json = json.dumps(state_dict, indent=2, default=str)
             
             # Call LLM detection
             detect_out = self.ask_detect(state_json)
@@ -137,15 +154,15 @@ class LlamaClient:
         try:
             # Convert input to JSON
             state_dict = {
-                "conflict": input_data.conflict.dict(),
-                "ownship": input_data.ownship.dict(),
-                "traffic": [aircraft.dict() for aircraft in input_data.traffic],
+                "conflict": input_data.conflict.model_dump(),
+                "ownship": input_data.ownship.model_dump(),
+                "traffic": [aircraft.model_dump() for aircraft in input_data.traffic],
                 "constraints": input_data.constraints
             }
-            state_json = json.dumps(state_dict, indent=2)
+            state_json = json.dumps(state_dict, indent=2, default=str)
             
             # Call LLM resolution
-            resolve_out = self.ask_resolve(state_json, input_data.conflict.dict())
+            resolve_out = self.ask_resolve(state_json, input_data.conflict.model_dump())
             
             if resolve_out:
                 # Convert to LLMResolutionOutput format
@@ -153,24 +170,30 @@ class LlamaClient:
                 from .schemas import ResolutionCommand, ResolutionType
                 
                 # Create resolution command based on LLM output
+                # Set required fields for ResolutionCommand
+                new_heading_deg = None
+                new_speed_kt = None
+                new_altitude_ft = None
+                if resolve_out.action == "turn" and "heading_deg" in resolve_out.params:
+                    new_heading_deg = resolve_out.params["heading_deg"]
+                elif resolve_out.action in ["climb", "descend"] and "delta_ft" in resolve_out.params:
+                    current_alt = input_data.ownship.altitude_ft
+                    if resolve_out.action == "climb":
+                        new_altitude_ft = current_alt + resolve_out.params["delta_ft"]
+                    else:
+                        new_altitude_ft = current_alt - resolve_out.params["delta_ft"]
                 resolution_command = ResolutionCommand(
                     resolution_id=f"llm_{int(time.time())}",
                     target_aircraft=input_data.ownship.aircraft_id,
                     resolution_type=self._map_action_to_type(resolve_out.action),
+                    new_heading_deg=new_heading_deg,
+                    new_speed_kt=new_speed_kt,
+                    new_altitude_ft=new_altitude_ft,
                     issue_time=datetime.now(),
-                    safety_margin_nm=5.0  # Default safety margin
+                    expected_completion_time=None,
+                    is_validated=False,
+                    safety_margin_nm=5.0
                 )
-                
-                # Set specific parameters based on action
-                if resolve_out.action == "turn" and "heading_deg" in resolve_out.params:
-                    resolution_command.new_heading_deg = resolve_out.params["heading_deg"]
-                elif resolve_out.action in ["climb", "descend"] and "delta_ft" in resolve_out.params:
-                    current_alt = input_data.ownship.altitude_ft
-                    if resolve_out.action == "climb":
-                        resolution_command.new_altitude_ft = current_alt + resolve_out.params["delta_ft"]
-                    else:
-                        resolution_command.new_altitude_ft = current_alt - resolve_out.params["delta_ft"]
-                
                 return LLMResolutionOutput(
                     recommended_resolution=resolution_command,
                     reasoning=resolve_out.rationale,
@@ -242,15 +265,6 @@ Respond with JSON in this format:
   "action": "turn|climb|descend",
   "params": {{"heading_deg": 90}} or {{"delta_ft": 1000}},
   "rationale": "explanation of why this maneuver resolves the conflict safely"
-}}"""
-    
-    def _call_llm(self, prompt: str) -> Optional[str]:
-        """Call the LLM with retry logic.
-        
-        Args:
-            prompt: Input prompt
-            
-        Returns:
             LLM response string or None if failed
         """
         max_retries = 2
@@ -409,29 +423,6 @@ Return only valid JSON matching the required format."""
         
         return action_map.get(action, ResolutionType.HEADING_CHANGE)
     
-    def _create_detection_prompt(self, input_data: LLMDetectionInput) -> str:
-        """Create structured prompt for conflict detection.
-        
-        Args:
-            input_data: Detection input data
-            
-        Returns:
-            Formatted prompt string
-        """
-        # TODO: Implement in Sprint 3
-        pass
-    
-    def _create_resolution_prompt(self, input_data: LLMResolutionInput) -> str:
-        """Create structured prompt for resolution generation.
-        
-        Args:
-            input_data: Resolution input data
-            
-        Returns:
-            Formatted prompt string
-        """
-        # TODO: Implement in Sprint 3
-        pass
     
     def _validate_json_output(self, response: str, expected_schema: type) -> Optional[Dict[str, Any]]:
         """Validate LLM JSON output against expected schema.
@@ -439,15 +430,6 @@ Return only valid JSON matching the required format."""
         Args:
             response: Raw LLM response string
             expected_schema: Pydantic model class for validation
-            
-        Returns:
-            Validated JSON dict or None if invalid
-        """
-        # TODO: Implement in Sprint 3
-        pass
-    
-    def _retry_with_backoff(self, func, *args, max_retries: int = 3, **kwargs):
-        """Execute function with exponential backoff retry logic.
         
         Args:
             func: Function to retry

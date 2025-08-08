@@ -66,6 +66,49 @@ class MetricsSummary:
     avg_resolution_time_sec: float
 
 
+@dataclass
+class BaselineMetrics:
+    """Metrics for baseline (LLM-disabled) CDR system."""
+    
+    # Detection metrics
+    baseline_conflicts_detected: int
+    baseline_false_positives: int
+    baseline_detection_latency_sec: float
+    
+    # Resolution metrics
+    baseline_resolutions_issued: int
+    baseline_success_rate: float
+    baseline_resolution_delay_sec: float
+    
+    # Safety metrics
+    baseline_min_separation_nm: float
+    baseline_avg_separation_nm: float
+    baseline_safety_violations: int
+
+
+@dataclass
+class ComparisonReport:
+    """Comparison report between LLM and baseline systems."""
+    
+    # Detection comparison
+    detection_accuracy_improvement: float  # LLM vs baseline
+    false_alert_reduction: float
+    detection_latency_change_sec: float
+    
+    # Resolution comparison
+    success_rate_improvement: float
+    resolution_delay_improvement_sec: float
+    intrusiveness_comparison: float  # Lower is better
+    
+    # Safety comparison
+    separation_margin_improvement_nm: float
+    safety_violation_reduction: int
+    
+    # Overall assessment
+    overall_score: float  # Composite score 0-100
+    recommendation: str   # Text recommendation
+
+
 class MetricsCollector:
     """Collects and calculates CDR system performance metrics."""
     
@@ -88,7 +131,7 @@ class MetricsCollector:
         # Resolution tracking  
         self.resolutions_issued: List[ResolutionCommand] = []
         self.resolution_outcomes: Dict[str, bool] = {}
-        self.resolution_timings: Dict[str, Tuple[datetime, datetime]] = {}
+        self.resolution_timings: Dict[str, Tuple[datetime, Optional[datetime]]] = {}
         
         # Safety tracking
         self.separation_history: List[Tuple[datetime, str, str, float]] = []
@@ -292,6 +335,81 @@ class MetricsCollector:
             avg_resolution_time_sec=avg_resolution_time
         )
     
+    def compare_with_baseline(
+        self, 
+        baseline_metrics: BaselineMetrics
+    ) -> ComparisonReport:
+        """Compare LLM system performance with baseline.
+        
+        Args:
+            baseline_metrics: Baseline system performance metrics
+            
+        Returns:
+            Detailed comparison report
+        """
+        llm_summary = self.generate_summary()
+        
+        # Detection comparison
+        detection_accuracy_improvement = (
+            llm_summary.detection_accuracy - 
+            (1.0 - baseline_metrics.baseline_false_positives / max(1, baseline_metrics.baseline_conflicts_detected))
+        )
+        
+        false_alert_reduction = (
+            baseline_metrics.baseline_false_positives - llm_summary.false_positives
+        ) / max(1, baseline_metrics.baseline_false_positives)
+        
+        # Resolution comparison
+        success_rate_improvement = (
+            llm_summary.resolution_success_rate - baseline_metrics.baseline_success_rate
+        )
+        
+        resolution_delay_improvement = (
+            baseline_metrics.baseline_resolution_delay_sec - llm_summary.avg_resolution_time_sec
+        )
+        
+        # Safety comparison
+        separation_improvement = (
+            llm_summary.min_separation_achieved_nm - baseline_metrics.baseline_min_separation_nm
+        )
+        
+        safety_violation_reduction = (
+            baseline_metrics.baseline_safety_violations - llm_summary.safety_violations
+        )
+        
+        # Calculate overall score (0-100)
+        score_components = [
+            max(0, min(100, detection_accuracy_improvement * 100)),  # 0-100
+            max(0, min(100, false_alert_reduction * 100)),           # 0-100
+            max(0, min(100, success_rate_improvement * 100)),        # 0-100
+            max(0, min(100, separation_improvement * 20)),           # 0-100 (5nm = 100)
+            max(0, min(100, safety_violation_reduction * 10))        # 0-100 (10 violations = 100)
+        ]
+        overall_score = sum(score_components) / len(score_components)
+        
+        # Generate recommendation
+        if overall_score >= 80:
+            recommendation = "LLM system significantly outperforms baseline. Recommend deployment."
+        elif overall_score >= 60:
+            recommendation = "LLM system shows improvement over baseline. Consider deployment with monitoring."
+        elif overall_score >= 40:
+            recommendation = "LLM system shows mixed results. Requires further optimization."
+        else:
+            recommendation = "LLM system underperforms baseline. Not recommended for deployment."
+            
+        return ComparisonReport(
+            detection_accuracy_improvement=detection_accuracy_improvement,
+            false_alert_reduction=false_alert_reduction,
+            detection_latency_change_sec=0.0,  # TODO: Implement latency tracking
+            success_rate_improvement=success_rate_improvement,
+            resolution_delay_improvement_sec=resolution_delay_improvement,
+            intrusiveness_comparison=llm_summary.ri,  # TODO: Compare with baseline RI
+            separation_margin_improvement_nm=separation_improvement,
+            safety_violation_reduction=safety_violation_reduction,
+            overall_score=overall_score,
+            recommendation=recommendation
+        )
+
     def save_report(self, filepath: str) -> None:
         """Save metrics report to file.
         

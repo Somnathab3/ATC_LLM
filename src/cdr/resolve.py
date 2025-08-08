@@ -9,8 +9,10 @@ This module implements conflict resolution logic that:
 
 import logging
 import math
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 from datetime import datetime, timedelta
+from dataclasses import dataclass
+from collections import defaultdict
 
 from .schemas import (
     ResolveOut, ResolutionCommand, ResolutionType, 
@@ -26,6 +28,162 @@ MIN_ALTITUDE_CHANGE_FT = 1000.0
 MAX_ALTITUDE_CHANGE_FT = 2000.0
 MIN_SAFE_SEPARATION_NM = 5.0
 MIN_SAFE_SEPARATION_FT = 1000.0
+
+# Oscillation guard constraints
+OSCILLATION_WINDOW_MIN = 10.0  # 10 minutes window for oscillation detection
+MIN_NET_BENEFIT_THRESHOLD = 0.5  # Minimum improvement in separation (nm) to allow opposite command
+
+
+@dataclass
+class CommandHistory:
+    """Track command history for oscillation detection."""
+    aircraft_id: str
+    command_type: str  # "turn_left", "turn_right", "climb", "descend"
+    timestamp: datetime
+    heading_change: Optional[float] = None
+    altitude_change: Optional[float] = None
+    separation_benefit: Optional[float] = None
+
+
+# Global command history storage
+_command_history: Dict[str, List[CommandHistory]] = defaultdict(list)
+
+
+def _add_command_to_history(
+    aircraft_id: str,
+    command_type: str,
+    heading_change: Optional[float] = None,
+    altitude_change: Optional[float] = None,
+    separation_benefit: Optional[float] = None
+) -> None:
+    """Add command to history for oscillation tracking."""
+    history_entry = CommandHistory(
+        aircraft_id=aircraft_id,
+        command_type=command_type,
+        timestamp=datetime.now(),
+        heading_change=heading_change,
+        altitude_change=altitude_change,
+        separation_benefit=separation_benefit
+    )
+    
+    _command_history[aircraft_id].append(history_entry)
+    
+    # Clean old history (keep only last 20 minutes)
+    cutoff_time = datetime.now() - timedelta(minutes=20)
+    _command_history[aircraft_id] = [
+        cmd for cmd in _command_history[aircraft_id] 
+        if cmd.timestamp > cutoff_time
+    ]
+
+
+def _check_oscillation_guard(
+    aircraft_id: str,
+    proposed_command_type: str,
+    proposed_separation_benefit: float
+) -> bool:
+    """Check if proposed command would cause oscillation.
+    
+    Args:
+        aircraft_id: Aircraft identifier
+        proposed_command_type: Type of proposed command (turn_left, turn_right, climb, descend)
+        proposed_separation_benefit: Expected separation improvement (nm)
+        
+    Returns:
+        True if command is allowed, False if would cause oscillation
+    """
+    history = _command_history.get(aircraft_id, [])
+    if not history:
+        return True  # No history, allow command
+    
+    # Check for opposite commands within oscillation window
+    cutoff_time = datetime.now() - timedelta(minutes=OSCILLATION_WINDOW_MIN)
+    recent_commands = [cmd for cmd in history if cmd.timestamp > cutoff_time]
+    
+    # Define opposite command pairs
+    opposite_commands = {
+        "turn_left": "turn_right",
+        "turn_right": "turn_left", 
+        "climb": "descend",
+        "descend": "climb"
+    }
+    
+    opposite_command = opposite_commands.get(proposed_command_type)
+    if not opposite_command:
+        return True  # Unknown command type, allow
+    
+    # Look for recent opposite commands
+    for cmd in recent_commands:
+        if cmd.command_type == opposite_command:
+            # Found opposite command within window
+            # Only allow if there's significant net benefit
+            if proposed_separation_benefit < MIN_NET_BENEFIT_THRESHOLD:
+                logger.warning(
+                    f"Oscillation guard blocked {proposed_command_type} for {aircraft_id}: "
+                    f"recent {opposite_command} at {cmd.timestamp}, "
+                    f"insufficient benefit {proposed_separation_benefit:.2f}nm"
+                )
+                return False
+            else:
+                logger.info(
+                    f"Oscillation guard allowing {proposed_command_type} for {aircraft_id}: "
+                    f"sufficient benefit {proposed_separation_benefit:.2f}nm"
+                )
+                break
+    
+    return True
+
+
+def _classify_command_type(resolution_cmd: ResolutionCommand, ownship: AircraftState) -> str:
+    """Classify command type for oscillation tracking."""
+    if resolution_cmd.resolution_type == ResolutionType.HEADING_CHANGE:
+        if resolution_cmd.new_heading_deg is None:
+            return "unknown"
+        
+        heading_diff = (resolution_cmd.new_heading_deg - ownship.heading_deg + 180) % 360 - 180
+        if heading_diff > 0:
+            return "turn_right"
+        else:
+            return "turn_left"
+    
+    elif resolution_cmd.resolution_type == ResolutionType.ALTITUDE_CHANGE:
+        if resolution_cmd.new_altitude_ft is None:
+            return "unknown"
+            
+        if resolution_cmd.new_altitude_ft > ownship.altitude_ft:
+            return "climb"
+        else:
+            return "descend"
+    
+    return "unknown"
+
+
+def _estimate_separation_benefit(
+    resolution_cmd: ResolutionCommand,
+    ownship: AircraftState,
+    intruder: AircraftState
+) -> float:
+    """Estimate separation benefit from resolution command."""
+    try:
+        # Simplified estimation - can be enhanced with full trajectory prediction
+        if resolution_cmd.resolution_type == ResolutionType.HEADING_CHANGE:
+            # Estimate based on heading change magnitude
+            if resolution_cmd.new_heading_deg is None:
+                return 0.0
+            heading_change = abs(resolution_cmd.new_heading_deg - ownship.heading_deg)
+            return min(heading_change / 10.0, 3.0)  # Up to 3nm benefit for 30deg turn
+        
+        elif resolution_cmd.resolution_type == ResolutionType.ALTITUDE_CHANGE:
+            # Estimate based on altitude change
+            if resolution_cmd.new_altitude_ft is None:
+                return 0.0
+            altitude_change = abs(resolution_cmd.new_altitude_ft - ownship.altitude_ft)
+            return min(altitude_change / 1000.0 * 2.0, 5.0)  # Up to 5nm benefit for 2500ft change
+        
+        return 1.0  # Default modest benefit
+        
+    except Exception as e:
+        logger.error(f"Error estimating separation benefit: {e}")
+        return 0.0
 
 
 def execute_resolution(
@@ -52,10 +210,36 @@ def execute_resolution(
         if resolution_cmd is None:
             logger.error("Failed to create resolution command")
             return None
+        
+        # Check oscillation guard before proceeding
+        command_type = _classify_command_type(resolution_cmd, ownship)
+        separation_benefit = _estimate_separation_benefit(resolution_cmd, ownship, intruder)
+        
+        if not _check_oscillation_guard(ownship.aircraft_id, command_type, separation_benefit):
+            logger.warning(f"Oscillation guard blocked resolution for {ownship.aircraft_id}")
+            return None
             
         # Validate safety
         if _validate_resolution_safety(resolution_cmd, ownship, intruder):
             resolution_cmd.is_validated = True
+            
+            # Add to command history for oscillation tracking
+            heading_change = None
+            altitude_change = None
+            
+            if resolution_cmd.resolution_type == ResolutionType.HEADING_CHANGE:
+                heading_change = resolution_cmd.new_heading_deg - ownship.heading_deg if resolution_cmd.new_heading_deg else 0
+            elif resolution_cmd.resolution_type == ResolutionType.ALTITUDE_CHANGE:
+                altitude_change = resolution_cmd.new_altitude_ft - ownship.altitude_ft if resolution_cmd.new_altitude_ft else 0
+            
+            _add_command_to_history(
+                ownship.aircraft_id,
+                command_type,
+                heading_change=heading_change,
+                altitude_change=altitude_change,
+                separation_benefit=separation_benefit
+            )
+            
             logger.info(f"Resolution validated: {llm_resolution.action}")
             return resolution_cmd
         else:
@@ -105,6 +289,8 @@ def generate_horizontal_resolution(
             target_aircraft=ownship.aircraft_id,
             resolution_type=ResolutionType.HEADING_CHANGE,
             new_heading_deg=new_heading,
+            new_speed_kt=None,
+            new_altitude_ft=None,
             issue_time=datetime.now(),
             safety_margin_nm=5.0,
             is_validated=False
@@ -146,6 +332,8 @@ def generate_vertical_resolution(
             resolution_id=f"v_res_{int(datetime.now().timestamp())}",
             target_aircraft=ownship.aircraft_id,
             resolution_type=ResolutionType.ALTITUDE_CHANGE,
+            new_heading_deg=None,
+            new_speed_kt=None,
             new_altitude_ft=new_altitude,
             issue_time=datetime.now(),
             safety_margin_nm=5.0,
@@ -183,6 +371,9 @@ def _create_resolution_command(
             resolution_id=f"res_{int(datetime.now().timestamp())}",
             target_aircraft=ownship.aircraft_id,
             resolution_type=_map_action_to_resolution_type(llm_resolution.action),
+            new_heading_deg=None,
+            new_speed_kt=None,
+            new_altitude_ft=None,
             issue_time=datetime.now(),
             safety_margin_nm=0.0,  # Will be calculated later
             is_validated=False
@@ -287,7 +478,7 @@ def _validate_resolution_safety(
         }
         
         # Calculate CPA with resolution applied
-        dmin_nm, tmin_min = cpa_nm(own_dict, intr_dict)
+        dmin_nm, _ = cpa_nm(own_dict, intr_dict)
         
         # Calculate altitude separation
         alt_diff = abs(modified_ownship.altitude_ft - intruder.altitude_ft)
@@ -335,6 +526,8 @@ def _generate_fallback_resolution(
             resolution_id=f"fallback_{int(datetime.now().timestamp())}",
             target_aircraft=ownship.aircraft_id,
             resolution_type=ResolutionType.ALTITUDE_CHANGE,
+            new_heading_deg=None,
+            new_speed_kt=None,
             new_altitude_ft=ownship.altitude_ft + 1000,
             issue_time=datetime.now(),
             safety_margin_nm=0.0,
@@ -366,6 +559,77 @@ def _map_action_to_resolution_type(action: str) -> ResolutionType:
     return action_map.get(action, ResolutionType.HEADING_CHANGE)
 
 
+def apply_resolution(
+    bs: Any, 
+    cs: str, 
+    advise: ResolveOut, 
+    next_wpt: Optional[str] = None
+) -> bool:
+    """Apply validated LLM resolution advice to BlueSky.
+    
+    Args:
+        bs: BlueSky client instance
+        cs: Aircraft callsign
+        advise: LLM resolution advice
+        next_wpt: Next waypoint for return after heading change
+        
+    Returns:
+        True if resolution applied successfully
+    """
+    import threading
+    import time
+    
+    try:
+        if advise.action == "turn":
+            heading_deg = advise.params.get("heading_deg")
+            if heading_deg is None:
+                logger.error("Turn action missing heading_deg parameter")
+                return False
+                
+            # Execute heading change
+            success = bs.set_heading(cs, heading_deg)
+            if not success:
+                return False
+                
+            # Schedule return to next waypoint after hold time
+            hold_min = advise.params.get("hold_min", 4)  # Default 4 minutes
+            if next_wpt and hold_min > 0:
+                def delayed_direct():
+                    time.sleep(hold_min * 60)  # Convert to seconds
+                    bs.direct_to_waypoint(cs, next_wpt)
+                    logger.info(f"Returned {cs} direct to {next_wpt} after {hold_min} min hold")
+                
+                # Execute in background thread
+                threading.Thread(target=delayed_direct, daemon=True).start()
+                
+            logger.info(f"Applied turn resolution: {cs} heading {heading_deg}°")
+            return True
+            
+        elif advise.action in ("climb", "descend"):
+            target_ft = advise.params.get("target_ft")
+            if target_ft is None:
+                # Try delta_ft parameter
+                delta_ft = advise.params.get("delta_ft")
+                if delta_ft is None:
+                    logger.error(f"{advise.action} action missing target_ft or delta_ft parameter")
+                    return False
+                # Calculate target from current altitude (would need ownship state)
+                logger.warning("Using delta_ft without current altitude reference")
+                return False
+                
+            success = bs.set_altitude(cs, target_ft)
+            logger.info(f"Applied altitude resolution: {cs} to {target_ft} ft")
+            return success
+            
+        else:
+            logger.error(f"Unknown resolution action: {advise.action}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Failed to apply resolution for {cs}: {e}")
+        return False
+
+
 def format_resolution_command(cmd: ResolutionCommand) -> str:
     """Format resolution command for BlueSky execution.
     
@@ -384,7 +648,7 @@ def format_resolution_command(cmd: ResolutionCommand) -> str:
 def validate_resolution(
     resolution: ResolutionCommand,
     ownship: AircraftState,
-    traffic: list
+    traffic: List[AircraftState]
 ) -> bool:
     """Validate resolution against safety constraints.
     
@@ -397,7 +661,7 @@ def validate_resolution(
         True if resolution is safe to execute
     """
     # TODO: Implement in Sprint 2
-    pass
+    return True  # Placeholder return
 
 
 def to_bluesky_command(
@@ -414,4 +678,4 @@ def to_bluesky_command(
         BlueSky command string (e.g., "HDG KLM123 090")
     """
     # TODO: Implement in Sprint 2
-    pass
+    return f"# TODO: {aircraft_id}"  # Placeholder return
