@@ -1,0 +1,99 @@
+{
+  "waypoint_progress": [
+    {
+      "cycle": 0,
+      "waypoint": 1,
+      "distance_to_waypoint": 20.05149762555802,
+      "total_distance": 7.0000000000003055
+    },
+    {
+      "cycle": 1,
+      "waypoint": 1,
+      "distance_to_waypoint": 13.051497625557717,
+      "total_distance": 13.999999999999478
+    },
+    {
+      "cycle": 2,
+      "waypoint": 1,
+      "distance_to_waypoint": 6.051497625558544,
+      "total_distance": 20.05149762555802
+    },
+    {
+      "cycle": 3,
+      "waypoint": 1,
+      "distance_to_waypoint": 0.0,
+      "total_distance": 20.05149762555802
+    },
+    {
+      "cycle": 4,
+      "waypoint": 2,
+      "distance_to_waypoint": 7.320475306293052,
+      "total_distance": 27.05149762555827
+    },
+    {
+      "cycle": 5,
+      "waypoint": 2,
+      "distance_to_waypoint": 0.32047530629280313,
+      "total_distance": 27.371972931851072
+    }
+  ],
+  "conflict_resolution_timeline": [
+    {
+      "cycle": 2,
+      "simulation_time_min": 2.0,
+      "conflict_severity": 0.15994332409969736,
+      "separation_nm": 6.720453407202421,
+      "time_to_cpa_min": 0.0,
+      "llm_resolution_success": false,
+      "resolution_type": null
+    },
+    {
+      "cycle": 3,
+      "simulation_time_min": 3.0,
+      "conflict_severity": 0.874242801070948,
+      "separation_nm": 1.0060575914324164,
+      "time_to_cpa_min": 0.0,
+      "llm_resolution_success": false,
+      "resolution_type": null
+    }
+  ],
+  "llm_performance_over_time": [
+    {
+      "cycle": 0,
+      "llm_queries": 0,
+      "resolutions": 0
+    },
+    {
+      "cycle": 1,
+      "llm_queries": 0,
+      "resolutions": 0
+    },
+    {
+      "cycle": 2,
+      "llm_queries": 1,
+      "resolutions": 0
+    },
+    {
+      "cycle": 3,
+      "llm_queries": 1,
+      "resolutions": 0
+    },
+    {
+      "cycle": 4,
+      "llm_queries": 0,
+      "resolutions": 0
+    },
+    {
+      "cycle": 5,
+      "llm_queries": 0,
+      "resolutions": 0
+    }
+  ],
+  "summary_statistics": {
+    "total_conflicts": 2,
+    "total_llm_queries": 2,
+    "llm_success_rate": 0.0,
+    "route_completion": 66.66666666666666,
+    "resolution_type_distribution": {}
+  }
+}

@@ -11,6 +11,7 @@ fastapi==0.100.1
 uvicorn[standard]==0.22.0
 
 # Testing framework
+Rtree==0.1.0
 pytest==7.4.0
 pytest-cov==4.1.0
 

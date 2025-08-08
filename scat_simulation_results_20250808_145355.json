@@ -1,0 +1,38 @@
+{
+  "simulation_metadata": {
+    "scat_file": "100000.json",
+    "start_time": "2025-08-08T14:53:46.206502",
+    "end_time": "2025-08-08T14:53:55.468931",
+    "duration_seconds": 9.262429,
+    "simulation_success": false
+  },
+  "flight_metrics": {
+    "waypoints_total": 3,
+    "waypoints_reached": 0,
+    "completion_percentage": 0.0,
+    "total_distance_nm": 0.0,
+    "final_position": {
+      "latitude": 0.0,
+      "longitude": 0.0
+    }
+  },
+  "conflict_metrics": {
+    "conflicts_detected": 0,
+    "resolutions_executed": 0,
+    "resolution_success_rate": 0.0
+  },
+  "route_waypoints": [
+    {
+      "lat": 55.34817159175873,
+      "lon": 13.029962182044983
+    },
+    {
+      "lat": 55.11996388435364,
+      "lon": 13.216193318367004
+    },
+    {
+      "lat": 54.92331504821777,
+      "lon": 13.31443190574646
+    }
+  ]
+}

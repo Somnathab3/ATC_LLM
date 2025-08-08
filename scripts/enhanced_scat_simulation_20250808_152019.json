@@ -1,0 +1,917 @@
+{
+  "simulation_start": "2025-08-08T15:20:13.243706",
+  "scat_file": "100000.json",
+  "waypoints_reached": 1,
+  "total_waypoints": 10,
+  "conflicts_detected": 0,
+  "llm_resolutions": 0,
+  "successful_llm_resolutions": 0,
+  "simulation_cycles": 60,
+  "distance_traveled_nm": 413.0000000000038,
+  "navigation_log": [
+    {
+      "cycle": 0,
+      "position": [
+        55.243036064120496,
+        13.118470323780116
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 1,
+      "position": [
+        55.13790066159287,
+        13.206745180394023
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 2,
+      "position": [
+        55.03276538351835,
+        13.294788274357643
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 3,
+      "position": [
+        54.92763022924541,
+        13.382601114622389
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 4,
+      "position": [
+        54.82249519812848,
+        13.47018519678295
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 5,
+      "position": [
+        54.71736028952781,
+        13.55754200323679
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 6,
+      "position": [
+        54.612225502809494,
+        13.64467300334195
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 7,
+      "position": [
+        54.50709083734531,
+        13.731579653572567
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 8,
+      "position": [
+        54.401956292512715,
+        13.818263397671672
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 9,
+      "position": [
+        54.296821867694725,
+        13.904725666801937
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 10,
+      "position": [
+        54.191687562279895,
+        13.990967879694267
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 11,
+      "position": [
+        54.08655337566228,
+        14.076991442794224
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 12,
+      "position": [
+        53.98141930724127,
+        14.162797750406071
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 13,
+      "position": [
+        53.87628535642161,
+        14.248388184835221
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 14,
+      "position": [
+        53.77115152261334,
+        14.333764116528073
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 15,
+      "position": [
+        53.666017805231675,
+        14.418926904210252
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 16,
+      "position": [
+        53.56088420369699,
+        14.503877895022356
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 17,
+      "position": [
+        53.455750717434775,
+        14.588618424654328
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 18,
+      "position": [
+        53.350617345875534,
+        14.673149817477679
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 19,
+      "position": [
+        53.24548408845476,
+        14.757473386675542
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 20,
+      "position": [
+        53.14035094461285,
+        14.841590434371483
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 21,
+      "position": [
+        53.03521791379509,
+        14.925502251755574
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 22,
+      "position": [
+        52.930084995451544,
+        15.009210119209683
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 23,
+      "position": [
+        52.82495218903707,
+        15.092715306430364
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 24,
+      "position": [
+        52.71981949401121,
+        15.176019072550162
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 25,
+      "position": [
+        52.61468690983814,
+        15.259122666257326
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 26,
+      "position": [
+        52.50955443598666,
+        15.342027325913477
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 27,
+      "position": [
+        52.4044220719301,
+        15.42473427967036
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 28,
+      "position": [
+        52.2992898171463,
+        15.507244745584103
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 29,
+      "position": [
+        52.194157671117544,
+        15.589559931728445
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 30,
+      "position": [
+        52.08902563333052,
+        15.671681036306381
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 31,
+      "position": [
+        51.98389370327624,
+        15.753609247759869
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 32,
+      "position": [
+        51.87876188045004,
+        15.835345744878623
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 33,
+      "position": [
+        51.773630164351516,
+        15.91689169690676
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 34,
+      "position": [
+        51.66849855448447,
+        15.99824826364852
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 35,
+      "position": [
+        51.56336705035685,
+        16.079416595572184
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 36,
+      "position": [
+        51.45823565148075,
+        16.160397833912953
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 37,
+      "position": [
+        51.35310435737231,
+        16.24119311077402
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 38,
+      "position": [
+        51.24797316755171,
+        16.321803549226274
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 39,
+      "position": [
+        51.14284208154313,
+        16.402230263407205
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 40,
+      "position": [
+        51.03771109887467,
+        16.482474358617992
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 41,
+      "position": [
+        50.932580219078346,
+        16.562536931419118
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 42,
+      "position": [
+        50.82744944169005,
+        16.64241906972552
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 43,
+      "position": [
+        50.72231876624945,
+        16.722121852899363
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 44,
+      "position": [
+        50.617188192300034,
+        16.801646351842464
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 45,
+      "position": [
+        50.51205771938901,
+        16.880993629087243
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 46,
+      "position": [
+        50.4069273470673,
+        16.960164738886306
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 47,
+      "position": [
+        50.301797074889464,
+        17.03916072730067
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 48,
+      "position": [
+        50.19666690241369,
+        17.11798263228752
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 49,
+      "position": [
+        50.09153682920177,
+        17.196631483786064
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 50,
+      "position": [
+        49.98640685481903,
+        17.275108303802767
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 51,
+      "position": [
+        49.88127697883431,
+        17.35341410649528
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 52,
+      "position": [
+        49.77614720081989,
+        17.43154989825507
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 53,
+      "position": [
+        49.67101752035156,
+        17.509516677789406
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 54,
+      "position": [
+        49.56588793700845,
+        17.587315436201948
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 55,
+      "position": [
+        49.46075845037309,
+        17.664947157072447
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 56,
+      "position": [
+        49.355629060031326,
+        17.74241281653542
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 57,
+      "position": [
+        49.25049976557231,
+        17.81971338335768
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 58,
+      "position": [
+        49.145370566588454,
+        17.896849819014847
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    },
+    {
+      "cycle": 59,
+      "position": [
+        49.04024146267542,
+        17.97382307776718
+      ],
+      "heading": 154.35521210238113,
+      "llm_heading": null,
+      "target_waypoint": [
+        55.310309529304504,
+        13.061896562576294
+      ],
+      "waypoint_index": 1,
+      "conflict_detected": false
+    }
+  ],
+  "conflict_timeline": [],
+  "heading_changes": [],
+  "simulation_end": "2025-08-08T15:20:19.335772",
+  "duration_seconds": 6.092066
+}

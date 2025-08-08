@@ -11,14 +11,18 @@ from __future__ import annotations
 import logging, time, math, os, atexit
 from dataclasses import dataclass
 from typing import Any
-
+from pathlib import Path
+import os, logging
+from bluesky import sim
 log = logging.getLogger(__name__)
 
 @dataclass
 class BSConfig:
     headless: bool = True
     # Add any IPC/embedding knobs your BlueSky runner needs
-
+def _user_cache_dir() -> Path:
+    # BlueSky already reads/writes here (see your logs).
+    return Path.home() / "bluesky" / "cache"
 
 class BlueSkyClient:
     def __init__(self, cfg):
@@ -32,13 +36,14 @@ class BlueSkyClient:
         atexit.register(self._safe_shutdown)
 
     def _ensure_cache_dir(self):
-        # Prevent earlier cache error on Windows
         try:
-            import importlib.resources as ir
-            res_dir = str(ir.files('bluesky.resources'))
-            os.makedirs(os.path.join(res_dir, 'cache'), exist_ok=True)
+            cache_dir = _user_cache_dir()
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            # Optional: point BlueSky explicitly, if you want to be explicit:
+            os.environ.setdefault("BLUESKY_USERDIR", str(Path.home() / "bluesky"))
         except Exception as e:
-            log.warning("Could not pre-create BlueSky cache: %s", e)
+            # Make this DEBUG to avoid scaring users
+            log.debug("Could not ensure BlueSky user cache dir: %s", e)
 
     def connect(self) -> bool:
         """Start/attach BlueSky (embedded) and return True on success."""
@@ -50,9 +55,11 @@ class BlueSkyClient:
             bs.init()
             from bluesky import stack
             from bluesky import traf
+            from bluesky import sim
             # Store references to both stack and traf for different operations
             self.bs = stack  # use stack.stack(cmd) for commands
             self.traf = traf  # direct access to traffic arrays
+            self.sim = sim
             log.info("BlueSky stack ready.")
             return True
         except Exception as e:
@@ -97,9 +104,26 @@ class BlueSkyClient:
         return self.stack(f"{cs} DCT {wpt}")
 
     def step_minutes(self, minutes: float) -> bool:
-        # Run sim forward N seconds; adjust to your runner if needed
-        secs = int(minutes * 60)
-        return self.stack(f"FF {secs}")  # fast-forward; if unsupported, replace with your own tick loop
+        """
+        Advance the embedded BlueSky sim by 'minutes' of sim time by calling the
+        core stepper directly (more reliable than 'FF' here).
+        """
+        try:
+            total_secs = float(minutes) * 60.0
+            if total_secs <= 0:
+                return True
+
+            # Use a fixed internal dt so physics updates reliably.
+            # 0.5s is a good balance; adjust if you want finer dynamics.
+            dt = 0.5
+            steps = int(math.ceil(total_secs / dt))
+            for _ in range(steps):
+                self.sim.step(dt)
+            return True
+        except Exception as e:
+            log.exception("step_minutes failed: %s", e)
+            return False
+
     def sim_reset(self) -> bool:
         """Reset the simulation to a clean state."""
         # Clear all traffic first to avoid lingering shapes
@@ -128,40 +152,62 @@ class BlueSkyClient:
         return self.stack(f"TIME {iso_utc}")
 
     # --- State fetch ---
-    def get_aircraft_states(self) -> list[dict[str, Any]]:
+    def get_aircraft_states(self) -> dict[str, dict[str, Any]]:
         """
-        Return [{'id','lat','lon','alt_ft','hdg_deg','spd_kt','roc_fpm'}].
-        Fetches states from BlueSky traf arrays with proper unit conversions.
+        Return a mapping:
+        { '<CALLSIGN>': {'id','lat','lon','alt_ft','hdg_deg','spd_kt','roc_fpm'} }
+        Fetched from BlueSky traf arrays with proper unit conversions.
         """
-        states: list[dict[str, Any]] = []
+        out: dict[str, dict[str, Any]] = {}
         try:
             if not hasattr(self, "traf"):
                 log.warning("BlueSkyClient not connected. Attempting to connect()…")
                 if not self.connect():
-                    log.error("BlueSky connect() failed; returning empty state list.")
-                    return states
-            traf = self.traf
-            n = traf.ntraf
-            for i in range(n):
-                # Common BlueSky arrays: id, lat, lon, alt [m], gs [m/s], hdg/trk [deg]
-                cs = traf.id[i]
-                lat = float(traf.lat[i])
-                lon = float(traf.lon[i])
-                alt_ft = float(traf.alt[i]) * 3.28084  # m -> ft
-                spd_kt = float(traf.gs[i]) * 1.943844  # m/s -> kt
-                # Prefer heading if available, else use track
-                hdg_deg = float(getattr(traf, "hdg", getattr(traf, "trk", [0]*n))[i])
-                roc_fpm = float(getattr(traf, "vs", [0]*n)[i]) * 196.8504  # m/s -> fpm
+                    log.error("BlueSky connect() failed; returning empty state map.")
+                    return out
 
-                states.append({
-                    "id": cs, "lat": lat, "lon": lon,
-                    "alt_ft": alt_ft, "hdg_deg": hdg_deg,
-                    "spd_kt": spd_kt, "roc_fpm": roc_fpm,
-                })
-            return states
+            traf = self.traf
+            n = int(getattr(traf, "ntraf", 0))
+
+            # Resolve vector fields once to avoid getattr in the loop
+            ids = getattr(traf, "id")
+            lats = getattr(traf, "lat")
+            lons = getattr(traf, "lon")
+            alts_m = getattr(traf, "alt")
+            gs_ms = getattr(traf, "gs")
+            # Prefer heading (hdg), otherwise track (trk)
+            hdg_or_trk = getattr(traf, "hdg", getattr(traf, "trk", [0.0] * n))
+            vs_ms = getattr(traf, "vs", [0.0] * n)
+
+            for i in range(n):
+                # Normalize callsign to str and uppercase to match your spawns ("OWNSHIP", "INTRUDER1")
+                cs_raw = ids[i]
+                cs = str(cs_raw).strip().upper()
+
+                lat = float(lats[i])
+                lon = float(lons[i])
+                alt_ft = float(alts_m[i]) * 3.28084          # m -> ft
+                spd_kt = float(gs_ms[i]) * 1.943844          # m/s -> kt
+                hdg_deg = float(hdg_or_trk[i])               # deg
+                roc_fpm = float(vs_ms[i]) * 196.8504         # m/s -> fpm
+
+                out[cs] = {
+                    "id": cs,
+                    "lat": lat, "lon": lon,
+                    "alt_ft": alt_ft,
+                    "hdg_deg": hdg_deg,
+                    "spd_kt": spd_kt,
+                    "roc_fpm": roc_fpm,
+                }
+
+            return out
+
         except Exception as e:
             log.exception("BS state fetch failed: %s", e)
-            return states
+            return out
+        
+    def set_speed(self, cs: str, spd_kt: float) -> bool:
+         return self.stack(f"{cs} SPD {int(round(spd_kt))}")
     
     def direct_to_waypoint(self, cs: str, wpt: str) -> bool:
         """Convenience alias for direct_to method."""
