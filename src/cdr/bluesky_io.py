@@ -100,6 +100,32 @@ class BlueSkyClient:
         # Run sim forward N seconds; adjust to your runner if needed
         secs = int(minutes * 60)
         return self.stack(f"FF {secs}")  # fast-forward; if unsupported, replace with your own tick loop
+    def sim_reset(self) -> bool:
+        """Reset the simulation to a clean state."""
+        # Clear all traffic first to avoid lingering shapes
+        try:
+            self.stack("DEL ALL")
+        except Exception:
+            pass
+        return self.stack("RESET")
+
+    def sim_realtime(self, on: bool) -> bool:
+        """Toggle real-time pacing."""
+        return self.stack(f"REALTIME {'ON' if on else 'OFF'}")
+
+    def sim_set_dtmult(self, mult: float) -> bool:
+        """Set time-step multiplier (run faster than real time)."""
+        # BlueSky expects an integer or float value
+        return self.stack(f"DTMULT {mult}")
+
+    def sim_fastforward(self, seconds: int) -> bool:
+        """Advance the sim quickly without wall-clock wait."""
+        return self.stack(f"FF {int(seconds)}")
+
+    def sim_set_time_utc(self, iso_utc: str) -> bool:
+        """Set scenario UTC (YYYY-MM-DDTHH:MM:SS)."""
+        # e.g., "2025-08-08T12:30:00"
+        return self.stack(f"TIME {iso_utc}")
 
     # --- State fetch ---
     def get_aircraft_states(self) -> list[dict[str, Any]]:

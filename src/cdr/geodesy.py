@@ -59,6 +59,41 @@ def bearing_rad(a: Coordinate, b: Coordinate) -> float:
     x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(lon2 - lon1)
     return math.atan2(y, x)
 
+def normalize_heading_deg(hdg: float) -> float:
+    """Normalize a heading to [0, 360)."""
+    hdg %= 360.0
+    return hdg if hdg >= 0.0 else hdg + 360.0
+
+def bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Initial great-circle bearing from (lat1,lon1) to (lat2,lon2) in degrees."""
+    φ1 = math.radians(lat1)
+    φ2 = math.radians(lat2)
+    Δλ = math.radians(lon2 - lon1)
+
+    y = math.sin(Δλ) * math.cos(φ2)
+    x = math.cos(φ1) * math.sin(φ2) - math.sin(φ1) * math.cos(φ2) * math.cos(Δλ)
+    θ = math.degrees(math.atan2(y, x))
+    return normalize_heading_deg(θ)
+
+def destination_point_nm(lat: float, lon: float, bearing_deg_in: float, distance_nm: float):
+    """
+    Great-circle forward problem: from (lat,lon) go 'distance_nm' at 'bearing_deg_in'.
+    Returns (lat2, lon2) in degrees.
+    """
+    θ = math.radians(bearing_deg_in)
+    δ = distance_nm / R_NM  # angular distance
+    φ1 = math.radians(lat)
+    λ1 = math.radians(lon)
+
+    sinφ2 = math.sin(φ1) * math.cos(δ) + math.cos(φ1) * math.sin(δ) * math.cos(θ)
+    φ2 = math.asin(sinφ2)
+
+    y = math.sin(θ) * math.sin(δ) * math.cos(φ1)
+    x = math.cos(δ) - math.sin(φ1) * sinφ2
+    λ2 = λ1 + math.atan2(y, x)
+
+    return (math.degrees(φ2),
+            (math.degrees(λ2) + 540.0) % 360.0 - 180.0)  # normalize lon to [-180,180]
 
 def cpa_nm(own: Aircraft, intr: Aircraft) -> Tuple[float, float]:
     """Calculate Closest Point of Approach assuming constant velocity.
