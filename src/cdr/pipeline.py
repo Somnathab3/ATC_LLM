@@ -127,9 +127,13 @@ class CDRPipeline:
         Returns:
             List of current aircraft states
         """
-        # TODO: Implement BlueSky integration in Sprint 1
         logger.debug("Fetching aircraft states from BlueSky")
-        return []
+        if not self.bluesky_client.connected:
+            if not self.bluesky_client.connect():
+                logger.warning("Failed to connect to BlueSky")
+                return []
+        
+        return self.bluesky_client.get_aircraft_states()
     
     def _find_ownship(self, aircraft_states: List[AircraftState], ownship_id: str) -> Optional[AircraftState]:
         """Find ownship in aircraft states list.
