@@ -42,6 +42,10 @@ class CDRPipeline:
         self.llm_client = LlamaClient(config)
         self.metrics = MetricsCollector()
         
+        # Aliases for compatibility
+        self.bs = self.bluesky_client
+        self.log = logger
+        
         # State tracking
         self.active_resolutions: Dict[str, ResolutionCommand] = {}
         self.conflict_history: List[ConflictPrediction] = []
@@ -94,62 +98,44 @@ class CDRPipeline:
         """
         logger.debug(f"Starting cycle {self.cycle_count}")
         
-        # Step 1: Fetch current aircraft states
-        aircraft_states = self._fetch_aircraft_states()
-        if not aircraft_states:
-            logger.warning("No aircraft states available, skipping cycle")
-            return
-        
-        # Step 2: Identify ownship and traffic
-        ownship = self._find_ownship(aircraft_states, ownship_id)
-        if not ownship:
+        # Step 1: Fetch current aircraft states and split into ownship/traffic
+        ownship, traffic = self._fetch_aircraft_states(ownship_id)
+        if ownship is None:
             logger.warning(f"Ownship {ownship_id} not found, skipping cycle")
             return
         
-        traffic = [ac for ac in aircraft_states if ac.aircraft_id != ownship_id]
         logger.info(f"Processing ownship {ownship_id} with {len(traffic)} traffic aircraft")
         
-        # Step 3: Predict conflicts
+        # Step 2: Predict conflicts
         conflicts = self._predict_conflicts(ownship, traffic)
         logger.info(f"Detected {len(conflicts)} potential conflicts")
         
-        # Step 4: Generate and execute resolutions
+        # Step 3: Generate and execute resolutions
         for conflict in conflicts:
             if conflict.is_conflict:
                 self._handle_conflict(conflict, ownship, traffic)
         
-        # Step 5: Update metrics
+        # Step 4: Update metrics
         self._update_metrics(ownship, traffic, conflicts)
     
-    def _fetch_aircraft_states(self) -> List[AircraftState]:
-        """Fetch current aircraft states from BlueSky.
-        
-        Returns:
-            List of current aircraft states
-        """
-        logger.debug("Fetching aircraft states from BlueSky")
-        if not self.bluesky_client.connected:
-            if not self.bluesky_client.connect():
-                logger.warning("Failed to connect to BlueSky")
-                return []
-        
-        return self.bluesky_client.get_aircraft_states()
-    
-    def _find_ownship(self, aircraft_states: List[AircraftState], ownship_id: str) -> Optional[AircraftState]:
-        """Find ownship in aircraft states list.
+    def _fetch_aircraft_states(self, ownship_id: str):
+        """Fetch current aircraft states from BlueSky and split into ownship/traffic.
         
         Args:
-            aircraft_states: List of all aircraft states
-            ownship_id: Ownship identifier
+            ownship_id: Ownship aircraft identifier
             
         Returns:
-            Ownship state or None if not found
+            Tuple of (ownship_state, traffic_states) where ownship_state is dict or None,
+            and traffic_states is list of dicts
         """
-        for aircraft in aircraft_states:
-            if aircraft.aircraft_id == ownship_id:
-                return aircraft
-        return None
+        raw = self.bs.get_aircraft_states()
+        own = next((r for r in raw if r["id"] == ownship_id), None)
+        traffic = [r for r in raw if r["id"] != ownship_id]
+        if own is None:
+            self.log.warning("Ownship %s not found in BS state", ownship_id)
+        return own, traffic
     
+
     def _predict_conflicts(self, ownship: AircraftState, traffic: List[AircraftState]) -> List[ConflictPrediction]:
         """Predict conflicts using deterministic algorithms.
         
