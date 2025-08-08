@@ -34,38 +34,41 @@ class MetricsSummary:
     """Summary of CDR system performance metrics."""
     
     # Timing metrics
-    total_simulation_time_min: float
-    total_cycles: int
-    avg_cycle_time_sec: float
+    total_simulation_time_min: float = 0.0
+    total_cycles: int = 0
+    avg_cycle_time_sec: float = 0.0
     
     # Detection metrics
-    total_conflicts_detected: int
-    true_conflicts: int
-    false_positives: int
-    false_negatives: int
-    detection_accuracy: float
+    total_conflicts_detected: int = 0
+    true_conflicts: int = 0
+    false_positives: int = 0
+    false_negatives: int = 0
+    detection_accuracy: float = 0.0
     
     # Wolfgang (2011) KPIs
-    tbas: float  # Time-Based Alerting Score
-    lat: float   # Loss of Alerting Time
-    pa: int      # Predicted Alerts
-    pi: int      # Predicted Intrusions
-    dat: float   # Delay in Alert Time
-    dfa: float   # Delay in First Alert
-    re: float    # Resolution Efficiency
-    ri: float    # Resolution Intrusiveness
-    rat: float   # Resolution Alert Time
+    tbas: float = 0.0  # Time-Based Alerting Score
+    lat: float = 0.0   # Loss of Alerting Time
+    pa: int = 0      # Predicted Alerts
+    pi: int = 0      # Predicted Intrusions
+    dat: float = 0.0   # Delay in Alert Time
+    dfa: float = 0.0   # Delay in First Alert
+    re: float = 0.0    # Resolution Efficiency
+    ri: float = 0.0    # Resolution Intrusiveness
+    rat: float = 0.0   # Resolution Alert Time
     
     # Safety metrics
-    min_separation_achieved_nm: float
-    avg_separation_nm: float
-    safety_violations: int
+    min_separation_achieved_nm: float = float('inf')
+    avg_separation_nm: float = 0.0
+    safety_violations: int = 0
     
     # Resolution metrics
-    total_resolutions_issued: int
-    successful_resolutions: int
-    resolution_success_rate: float
-    avg_resolution_time_sec: float
+    total_resolutions_issued: int = 0
+    successful_resolutions: int = 0
+    resolution_success_rate: float = 0.0
+    avg_resolution_time_sec: float = 0.0
+    
+    # Run identification
+    run_label: str = "run"
 
 
 @dataclass
@@ -116,6 +119,7 @@ class MetricsCollector:
     
     def __init__(self):
         """Initialize metrics collector."""
+        self.run_label = "run"  # Default label for identifying runs
         self.reset()
         logger.info("Metrics collector initialized")
     
@@ -334,8 +338,17 @@ class MetricsCollector:
             total_resolutions_issued=len(self.resolutions_issued),
             successful_resolutions=successful_resolutions,
             resolution_success_rate=success_rate,
-            avg_resolution_time_sec=avg_resolution_time
+            avg_resolution_time_sec=avg_resolution_time,
+            run_label=getattr(self, "run_label", "run")
         )
+
+    def _compute_accuracy_safe(self) -> float:
+        """Compute detection accuracy with safe defaults."""
+        tp = getattr(self, "true_positives", len([c for c in self.conflicts_detected if c.is_conflict]))
+        fp = getattr(self, "false_alerts", len([c for c in self.conflicts_detected if not c.is_conflict]))
+        fn = getattr(self, "missed_conflicts", len(self.ground_truth_conflicts) - tp)
+        denom = tp + fp + fn
+        return (tp / denom) if denom else 0.0
     
     def compare_with_baseline(
         self, 

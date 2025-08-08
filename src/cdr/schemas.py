@@ -190,3 +190,7 @@ class ConfigurationSettings(BaseModel):
     bluesky_host: str = Field("localhost")
     bluesky_port: int = Field(1337, gt=0, le=65535)
     bluesky_timeout_sec: float = Field(5.0, gt=0)
+    
+    # Fast-time simulation
+    fast_time: bool = Field(True, description="If True, do not wall-sleep; advance sim time only")
+    sim_accel_factor: float = Field(1.0, gt=0, description="Multiply simulated step length per cycle")

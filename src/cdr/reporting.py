@@ -8,6 +8,7 @@ This module generates:
 """
 
 import logging
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -135,47 +136,77 @@ class Sprint5Reporter:
         
         return str(output_path)
     
-    def generate_performance_charts(
-        self,
-        metrics_data: List[MetricsSummary],
-        stress_results: List[StressTestResult],
-        charts_subdir: str = "charts"
-    ) -> str:
-        """Generate comprehensive performance charts.
-        
-        Args:
-            metrics_data: Metrics summaries for charting
-            stress_results: Stress test results
-            charts_subdir: Subdirectory for charts
-            
-        Returns:
-            Path to charts directory
+    def generate_performance_charts(self, metrics_data: List[Any], stress_results: List[Any] | None = None) -> str:
         """
-        charts_dir = self.output_dir / charts_subdir
-        charts_dir.mkdir(exist_ok=True)
-        
-        # Chart 1: Detection Performance Over Time
-        if metrics_data:
+        Accepts either:
+          - a list of MetricsSummary objects (aggregated), or
+          - a list of per-cycle/time-series metrics (each item has .timestamp)
+        Falls back to summary bars if timestamps are absent.
+        """
+        charts_dir = os.path.join(self.output_dir, "charts")
+        os.makedirs(charts_dir, exist_ok=True)
+
+        # If the first item has 'timestamp', assume time-series; else use summary bars
+        if metrics_data and hasattr(metrics_data[0], "timestamp"):
             self._plot_detection_performance(metrics_data, charts_dir)
-        
-        # Chart 2: Resolution Success Rates
-        if metrics_data:
-            self._plot_resolution_performance(metrics_data, charts_dir)
-        
-        # Chart 3: Safety Metrics
-        if metrics_data:
-            self._plot_safety_metrics(metrics_data, charts_dir)
-        
-        # Chart 4: Stress Test Results
+        else:
+            self._plot_summary_bars(metrics_data, charts_dir)
+
+        # stress charts optional
         if stress_results:
-            self._plot_stress_test_results(stress_results, charts_dir)
+            self._plot_stress_results(stress_results, charts_dir)
+
+        return charts_dir
+
+    def _plot_summary_bars(self, metrics_list: List[Any], outdir: str) -> None:
+        """
+        Draw simple grouped bar charts from MetricsSummary-like objects.
+        Maps MetricsSummary attributes to expected chart attributes:
+          total_conflicts_detected -> conflicts_detected
+          false_negatives -> missed_conflicts 
+          false_positives -> false_alerts
+          total_resolutions_issued -> resolutions_issued
+          safety_violations -> intrusions
+          detection_accuracy (already matches)
+        """
+        if not metrics_list:
+            return
+
+        labels = [getattr(m, "run_label", f"run_{i+1}") for i, m in enumerate(metrics_list)]
         
-        # Chart 5: Failure Mode Distribution
-        if stress_results:
-            self._plot_failure_modes(stress_results, charts_dir)
-        
-        logger.info(f"Performance charts saved to: {charts_dir}")
-        return str(charts_dir)
+        # Map MetricsSummary attributes to chart attributes
+        detected = [getattr(m, "total_conflicts_detected", getattr(m, "conflicts_detected", 0)) for m in metrics_list]
+        missed   = [getattr(m, "false_negatives", getattr(m, "missed_conflicts", 0)) for m in metrics_list]
+        false    = [getattr(m, "false_positives", getattr(m, "false_alerts", 0)) for m in metrics_list]
+        solved   = [getattr(m, "total_resolutions_issued", getattr(m, "resolutions_issued", 0)) for m in metrics_list]
+        los      = [getattr(m, "safety_violations", getattr(m, "intrusions", 0)) for m in metrics_list]
+        acc      = [getattr(m, "detection_accuracy", 0.0) for m in metrics_list]  # 0..1
+
+        # 1) Detection counts
+        plt.figure()
+        x = range(len(labels))
+        width = 0.20
+        plt.bar([i - 2*width for i in x], detected, width, label="Detected")
+        plt.bar([i - 1*width for i in x], missed,   width, label="Missed")
+        plt.bar([i + 0*width for i in x], false,    width, label="False")
+        plt.bar([i + 1*width for i in x], solved,   width, label="Resolutions")
+        plt.bar([i + 2*width for i in x], los,      width, label="LoS")
+        plt.xticks(list(x), labels, rotation=0)
+        plt.legend()
+        plt.title("Conflict & Resolution Summary")
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir, "summary_counts.png"))
+        plt.close()
+
+        # 2) Detection accuracy
+        plt.figure()
+        plt.bar(range(len(labels)), [a * 100 for a in acc])
+        plt.xticks(range(len(labels)), labels)
+        plt.ylabel("Accuracy (%)")
+        plt.title("Detection Accuracy")
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir, "detection_accuracy.png"))
+        plt.close()
     
     def _plot_detection_performance(
         self,

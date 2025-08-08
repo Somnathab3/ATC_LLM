@@ -100,13 +100,17 @@ class CDRPipeline:
                 
                 # Calculate sleep time for next cycle
                 cycle_duration = (datetime.now() - cycle_start).total_seconds()
-                sleep_time = max(0, self.config.polling_interval_min * 60 - cycle_duration)
                 
-                logger.info(f"Cycle {self.cycle_count} completed in {cycle_duration:.2f}s, "
-                           f"sleeping {sleep_time:.2f}s")
+                logger.info(f"Cycle {self.cycle_count} completed in {cycle_duration:.2f}s")
                 
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
+                # NO WALL-CLOCK SLEEP IN FAST-TIME
+                if not getattr(self.config, "fast_time", True):
+                    # preserve original real-time pacing only when fast_time=False
+                    period = max(0.0, self.config.polling_interval_min * 60.0 - cycle_duration)
+                    if period > 0:
+                        logger.info(f"Real-time mode: sleeping {period:.2f}s")
+                        time.sleep(period)
+                    
                 
                 self.cycle_count += 1
                 
@@ -121,6 +125,7 @@ class CDRPipeline:
             raise
         finally:
             self.running = False
+            logger.info("Cleaning up CDR pipeline")
             self._cleanup()
     
     def _execute_cycle(self, ownship_id: str) -> None:
@@ -150,6 +155,11 @@ class CDRPipeline:
         
         # Step 4: Update metrics
         self._update_metrics(ownship, traffic, conflicts)
+        
+        # Step 5: Advance BlueSky simulated time by the polling interval (fast-time progression)
+        self.bluesky_client.step_minutes(
+            self.config.polling_interval_min * self.config.sim_accel_factor
+        )
     
     def _fetch_aircraft_states(self, ownship_id: str):
         """Fetch current aircraft states from BlueSky and split into ownship/traffic.
@@ -441,8 +451,8 @@ Provide your resolution as JSON with fields: resolution_type (either "heading" o
         # Save metrics
         self.metrics.save_report(f"reports/sprint_0/cycle_{self.cycle_count}_metrics.json")
         
-        # Close connections
-        if hasattr(self.bluesky_client, 'close'):
+        # Close BlueSky connections and clean up shapes
+        if self.bluesky_client:
             self.bluesky_client.close()
     
     def stop(self) -> None:
@@ -467,7 +477,9 @@ def main():
         max_altitude_change_ft=2000.0,
         bluesky_host="localhost",
         bluesky_port=1337,
-        bluesky_timeout_sec=5.0
+        bluesky_timeout_sec=5.0,
+        fast_time=True,
+        sim_accel_factor=1.0
     )
     pipeline = CDRPipeline(config)
     

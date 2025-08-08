@@ -8,7 +8,7 @@ This module provides a clean interface to BlueSky that:
 """
 
 from __future__ import annotations
-import logging, time, math, os
+import logging, time, math, os, atexit
 from dataclasses import dataclass
 from typing import Any
 
@@ -27,6 +27,9 @@ class BlueSkyClient:
         # Add host attribute expected by tests
         self.host = getattr(cfg, 'bluesky_host', '127.0.0.1')
         self.port = getattr(cfg, 'bluesky_port', 5555)
+        
+        # Register cleanup handler for interpreter shutdown
+        atexit.register(self._safe_shutdown)
 
     def _ensure_cache_dir(self):
         # Prevent earlier cache error on Windows
@@ -152,7 +155,25 @@ class BlueSkyClient:
             return False
     
     def close(self):
-        """Clean up resources."""
-        # Clean up BlueSky if needed
-        pass
+        """Clean up BlueSky resources to prevent shape cleanup crashes."""
+        try:
+            # Stop producing new shapes
+            if hasattr(self, 'bs') and self.bs:
+                self.bs.stack("TRAIL OFF")
+                self.bs.stack("AREA OFF")
+        except Exception:
+            pass
+        try:
+            # Delete all traffic so no shapes remain
+            if hasattr(self, 'bs') and self.bs:
+                self.bs.stack("DEL ALL")
+        except Exception:
+            pass
+
+    def _safe_shutdown(self):
+        """Safe shutdown handler for atexit."""
+        try:
+            self.close()
+        except Exception:
+            pass
 
