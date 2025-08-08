@@ -106,7 +106,12 @@ class BlueSkyClient:
         """
         states: list[dict[str, Any]] = []
         try:
-            traf = self.traf  # set in connect()
+            if not hasattr(self, "traf"):
+                log.warning("BlueSkyClient not connected. Attempting to connect()…")
+                if not self.connect():
+                    log.error("BlueSky connect() failed; returning empty state list.")
+                    return states
+            traf = self.traf
             n = traf.ntraf
             for i in range(n):
                 # Common BlueSky arrays: id, lat, lon, alt [m], gs [m/s], hdg/trk [deg]
