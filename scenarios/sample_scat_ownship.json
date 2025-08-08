@@ -1,0 +1,98 @@
+{
+  "scenario_name": "sample_scat_ownship",
+  "description": "Basic SCAT scenario with one ownship and two intruders for testing conflict detection",
+  "start_time": "2024-08-08T12:00:00Z",
+  "duration_minutes": 30,
+  "aircraft": [
+    {
+      "aircraft_id": "OWNSHIP",
+      "callsign": "OWN001",
+      "aircraft_type": "A320",
+      "role": "ownship",
+      "initial_state": {
+        "latitude": 59.3293,
+        "longitude": 18.0686,
+        "altitude_ft": 35000,
+        "ground_speed_kt": 450,
+        "heading_deg": 90,
+        "vertical_speed_fpm": 0
+      },
+      "flight_plan": [
+        {"waypoint": "START", "lat": 59.3293, "lon": 18.0686, "alt_ft": 35000},
+        {"waypoint": "WPT1", "lat": 59.3293, "lon": 19.0686, "alt_ft": 35000},
+        {"waypoint": "END", "lat": 59.3293, "lon": 20.0686, "alt_ft": 35000}
+      ]
+    },
+    {
+      "aircraft_id": "INTRUDER1",
+      "callsign": "TFC001",
+      "aircraft_type": "B737",
+      "role": "intruder",
+      "initial_state": {
+        "latitude": 59.4293,
+        "longitude": 18.8686,
+        "altitude_ft": 35000,
+        "ground_speed_kt": 420,
+        "heading_deg": 270,
+        "vertical_speed_fpm": 0
+      },
+      "flight_plan": [
+        {"waypoint": "INT1_START", "lat": 59.4293, "lon": 18.8686, "alt_ft": 35000},
+        {"waypoint": "INT1_WPT1", "lat": 59.4293, "lon": 17.8686, "alt_ft": 35000},
+        {"waypoint": "INT1_END", "lat": 59.4293, "lon": 16.8686, "alt_ft": 35000}
+      ],
+      "notes": "Head-on conflict scenario with ownship around 18.4° longitude"
+    },
+    {
+      "aircraft_id": "INTRUDER2", 
+      "callsign": "TFC002",
+      "aircraft_type": "A330",
+      "role": "intruder",
+      "initial_state": {
+        "latitude": 59.1293,
+        "longitude": 18.2686,
+        "altitude_ft": 35500,
+        "ground_speed_kt": 480,
+        "heading_deg": 45,
+        "vertical_speed_fpm": -200
+      },
+      "flight_plan": [
+        {"waypoint": "INT2_START", "lat": 59.1293, "lon": 18.2686, "alt_ft": 35500},
+        {"waypoint": "INT2_WPT1", "lat": 59.5293, "lon": 18.6686, "alt_ft": 34500},
+        {"waypoint": "INT2_END", "lat": 59.9293, "lon": 19.0686, "alt_ft": 33500}
+      ],
+      "notes": "Crossing conflict with slight altitude difference and descent"
+    }
+  ],
+  "expected_conflicts": [
+    {
+      "ownship_id": "OWNSHIP",
+      "intruder_id": "INTRUDER1", 
+      "conflict_type": "horizontal",
+      "expected_time_to_cpa_min": 6.5,
+      "expected_distance_at_cpa_nm": 0.5,
+      "expected_severity": "high"
+    },
+    {
+      "ownship_id": "OWNSHIP",
+      "intruder_id": "INTRUDER2",
+      "conflict_type": "both",
+      "expected_time_to_cpa_min": 8.2,
+      "expected_distance_at_cpa_nm": 3.8,
+      "expected_severity": "medium"
+    }
+  ],
+  "test_parameters": {
+    "polling_interval_min": 1.0,
+    "lookahead_time_min": 10.0,
+    "min_horizontal_separation_nm": 5.0,
+    "min_vertical_separation_ft": 1000.0
+  },
+  "metadata": {
+    "created_by": "CDR Test Suite",
+    "version": "1.0",
+    "airspace": "ESSA_TMA",
+    "weather": "CAVOK",
+    "notes": "Basic test scenario for Sprint 0 validation"
+  }
+}

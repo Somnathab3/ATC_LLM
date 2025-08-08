@@ -1,0 +1,24 @@
+# BlueSky Initialization Script
+# This file contains BlueSky commands to set up the initial test scenario
+
+# Initialize simulation
+IC
+
+# Create ownship
+CRE OWNSHIP A320 59.3293 18.0686 90 35000 450
+
+# Create intruder aircraft
+CRE INTRUDER1 B737 59.4293 18.8686 270 35000 420
+CRE INTRUDER2 A330 59.1293 18.2686 45 35500 480
+
+# Set vertical speeds
+VS INTRUDER2 -200
+
+# Enable conflict detection (BlueSky built-in)
+ASAS ON
+
+# Set simulation speed (optional - for testing)
+FF 1
+
+# Start scenario
+OP
