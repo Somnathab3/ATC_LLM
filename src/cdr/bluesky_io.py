@@ -1,241 +1,132 @@
 """BlueSky simulator interface for aircraft state and command execution.
 
 This module provides a clean interface to BlueSky that:
-- Connects to BlueSky TCP socket interface
+- Embeds BlueSky simulator directly for better performance
 - Fetches real-time aircraft states (position, velocity, flight plan)
 - Executes ATC commands (HDG, ALT, SPD, DCT)
 - Handles connection errors and retries gracefully
 """
 
-import socket
-import json
-import logging
-from typing import List, Optional, Dict, Any, Tuple
-from datetime import datetime
+from __future__ import annotations
+import logging, time, math, os
+from dataclasses import dataclass
+from typing import Dict, List
 
-from .schemas import AircraftState, ResolutionCommand, ConfigurationSettings
+log = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
+@dataclass
+class BSConfig:
+    headless: bool = True
+    # Add any IPC/embedding knobs your BlueSky runner needs
 
 
 class BlueSkyClient:
-    """Client for BlueSky air traffic simulator."""
-    
-    def __init__(self, config: ConfigurationSettings):
-        """Initialize BlueSky client.
-        
-        Args:
-            config: System configuration including BlueSky connection details
-        """
-        self.config = config
-        self.host = config.bluesky_host
-        self.port = config.bluesky_port
-        self.timeout = config.bluesky_timeout_sec
-        
-        self.socket: Optional[socket.socket] = None
-        self.connected = False
-        
-        logger.info(f"BlueSky client configured for {self.host}:{self.port}")
-    
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.bs = None  # handle to embedded bluesky or API wrapper
+
+    def _ensure_cache_dir(self):
+        # Prevent earlier cache error on Windows
+        try:
+            import importlib.resources as ir
+            res_dir = str(ir.files('bluesky.resources'))
+            os.makedirs(os.path.join(res_dir, 'cache'), exist_ok=True)
+        except Exception as e:
+            log.warning("Could not pre-create BlueSky cache: %s", e)
+
     def connect(self) -> bool:
-        """Establish connection to BlueSky simulator.
-        
-        Returns:
-            True if connection successful
-        """
+        """Start/attach BlueSky (embedded) and return True on success."""
+        self._ensure_cache_dir()
         try:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.settimeout(self.timeout)
-            self.socket.connect((self.host, self.port))
-            self.connected = True
-            
-            logger.info(f"Connected to BlueSky at {self.host}:{self.port}")
+            # Embedded import/run
+            import bluesky as bs
+            # Initialize BlueSky
+            bs.init()
+            from bluesky import stack
+            from bluesky import traf
+            # Store references to both stack and traf for different operations
+            self.bs = stack  # use stack.stack(cmd) for commands
+            self.traf = traf  # direct access to traffic arrays
+            log.info("BlueSky stack ready.")
             return True
-            
         except Exception as e:
-            logger.error(f"Failed to connect to BlueSky: {e}")
-            self.connected = False
+            log.exception("BlueSky connect failed: %s", e)
             return False
-    
-    def disconnect(self) -> None:
-        """Close connection to BlueSky simulator."""
-        if self.socket:
-            self.socket.close()
-            self.socket = None
-        self.connected = False
-        logger.info("Disconnected from BlueSky")
-    
-    def send_command(self, command: str) -> bool:
-        """Send command to BlueSky simulator.
-        
-        Args:
-            command: BlueSky command string (e.g., "HDG KLM123 090")
-            
-        Returns:
-            True if command sent successfully
-        """
-        if not self.connected and not self.connect():
+
+    # --- Commands ---
+    def stack(self, cmd: str) -> bool:
+        try:
+            self.bs.stack(cmd)  # BlueSky stack returns None, not boolean
+            log.debug("BS cmd OK: %s", cmd)
+            return True
+        except Exception as e:
+            log.exception("BS stack error: %s", e)
             return False
+
+    def create_aircraft(self, cs: str, actype: str, lat: float, lon: float, hdg_deg: float, alt_ft: float, spd_kt: float) -> bool:
+        # Use BlueSky's direct traffic creation method
+        # Convert altitude from feet to meters (BlueSky uses meters)
+        alt_m = alt_ft * 0.3048
+        # Convert speed from knots to m/s (BlueSky uses m/s)
+        spd_ms = spd_kt * 0.514444
         
         try:
-            # BlueSky expects commands terminated with newline
-            message = command.strip() + '\n'
-            self.socket.send(message.encode('utf-8'))
-            
-            logger.debug(f"Sent command: {command}")
-            return True
-            
+            result = self.traf.cre(cs, actype, lat, lon, hdg_deg, alt_m, spd_ms)
+            if result:
+                log.debug(f"Created aircraft {cs} at ({lat:.6f}, {lon:.6f})")
+            else:
+                log.error(f"Failed to create aircraft {cs}")
+            return bool(result)
         except Exception as e:
-            logger.error(f"Failed to send command '{command}': {e}")
-            self.connected = False
+            log.exception(f"Error creating aircraft {cs}: %s", e)
             return False
-    
-    def get_aircraft_states(self) -> List[AircraftState]:
-        """Fetch current aircraft states from BlueSky.
-        
-        Returns:
-            List of current aircraft states
+
+    def set_heading(self, cs: str, hdg_deg: float) -> bool:
+        return self.stack(f"{cs} HDG {int(round(hdg_deg))}")
+
+    def set_altitude(self, cs: str, alt_ft: float) -> bool:
+        return self.stack(f"{cs} ALT {int(round(alt_ft))}")
+
+    def direct_to(self, cs: str, wpt: str) -> bool:
+        return self.stack(f"{cs} DCT {wpt}")
+
+    def step_minutes(self, minutes: float) -> bool:
+        # Run sim forward N seconds; adjust to your runner if needed
+        secs = int(minutes * 60)
+        return self.stack(f"FF {secs}")  # fast-forward; if unsupported, replace with your own tick loop
+
+    # --- State fetch ---
+    def get_aircraft_states(self) -> List[Dict]:
         """
-        # TODO: Implement actual BlueSky state fetching in Sprint 1
-        # For now, return empty list
-        logger.debug("Fetching aircraft states from BlueSky")
-        return []
-    
-    def execute_command(self, resolution: ResolutionCommand) -> bool:
-        """Execute resolution command via BlueSky.
-        
-        Args:
-            resolution: Resolution command to execute
-            
-        Returns:
-            True if command executed successfully
+        Return [{'id','lat','lon','alt_ft','hdg_deg','spd_kt','roc_fpm'}].
+        Try direct access to traf arrays if embedded; otherwise provide a fallback.
         """
-        command_str = self._resolution_to_bluesky_command(resolution)
-        if not command_str:
-            logger.error(f"Failed to convert resolution {resolution.resolution_id} to BlueSky command")
-            return False
-        
-        success = self.send_command(command_str)
-        if success:
-            logger.info(f"Executed BlueSky command: {command_str}")
-        
-        return success
-    
-    def create_aircraft(self, aircraft_id: str, aircraft_type: str, lat: float, lon: float, 
-                       hdg: float, alt: float, spd: float) -> bool:
-        """Create new aircraft in BlueSky simulation.
-        
-        Args:
-            aircraft_id: Unique aircraft identifier
-            aircraft_type: Aircraft type code (e.g., "A320")
-            lat: Initial latitude in degrees
-            lon: Initial longitude in degrees  
-            hdg: Initial heading in degrees
-            alt: Initial altitude in feet
-            spd: Initial speed in knots
-            
-        Returns:
-            True if aircraft created successfully
-        """
-        command = f"CRE {aircraft_id} {aircraft_type} {lat} {lon} {hdg} {alt} {spd}"
-        return self.send_command(command)
-    
-    def delete_aircraft(self, aircraft_id: str) -> bool:
-        """Delete aircraft from BlueSky simulation.
-        
-        Args:
-            aircraft_id: Aircraft identifier to delete
-            
-        Returns:
-            True if aircraft deleted successfully
-        """
-        command = f"DEL {aircraft_id}"
-        return self.send_command(command)
-    
-    def set_heading(self, aircraft_id: str, heading_deg: float) -> bool:
-        """Set aircraft heading.
-        
-        Args:
-            aircraft_id: Target aircraft identifier
-            heading_deg: New heading in degrees
-            
-        Returns:
-            True if command successful
-        """
-        command = f"HDG {aircraft_id} {heading_deg:03.0f}"
-        return self.send_command(command)
-    
-    def set_altitude(self, aircraft_id: str, altitude_ft: float) -> bool:
-        """Set aircraft altitude.
-        
-        Args:
-            aircraft_id: Target aircraft identifier
-            altitude_ft: New altitude in feet
-            
-        Returns:
-            True if command successful
-        """
-        command = f"ALT {aircraft_id} {altitude_ft:.0f}"
-        return self.send_command(command)
-    
-    def set_speed(self, aircraft_id: str, speed_kt: float) -> bool:
-        """Set aircraft speed.
-        
-        Args:
-            aircraft_id: Target aircraft identifier
-            speed_kt: New speed in knots
-            
-        Returns:
-            True if command successful
-        """
-        command = f"SPD {aircraft_id} {speed_kt:.0f}"
-        return self.send_command(command)
-    
-    def direct_to_waypoint(self, aircraft_id: str, waypoint: str) -> bool:
-        """Direct aircraft to waypoint.
-        
-        Args:
-            aircraft_id: Target aircraft identifier
-            waypoint: Waypoint identifier
-            
-        Returns:
-            True if command successful
-        """
-        command = f"DCT {aircraft_id} {waypoint}"
-        return self.send_command(command)
-    
-    def _resolution_to_bluesky_command(self, resolution: ResolutionCommand) -> Optional[str]:
-        """Convert resolution command to BlueSky command string.
-        
-        Args:
-            resolution: Resolution command to convert
-            
-        Returns:
-            BlueSky command string or None if conversion failed
-        """
-        aircraft_id = resolution.target_aircraft
-        
-        if resolution.resolution_type.value == "heading_change" and resolution.new_heading_deg is not None:
-            return f"HDG {aircraft_id} {resolution.new_heading_deg:03.0f}"
-        
-        elif resolution.resolution_type.value == "altitude_change" and resolution.new_altitude_ft is not None:
-            return f"ALT {aircraft_id} {resolution.new_altitude_ft:.0f}"
-        
-        elif resolution.resolution_type.value == "speed_change" and resolution.new_speed_kt is not None:
-            return f"SPD {aircraft_id} {resolution.new_speed_kt:.0f}"
-        
-        elif resolution.resolution_type.value == "combined":
-            # For combined resolutions, prioritize the most critical maneuver
-            # TODO: Implement multi-command execution
-            if resolution.new_heading_deg is not None:
-                return f"HDG {aircraft_id} {resolution.new_heading_deg:03.0f}"
-            elif resolution.new_altitude_ft is not None:
-                return f"ALT {aircraft_id} {resolution.new_altitude_ft:.0f}"
-        
-        logger.error(f"Unknown resolution type: {resolution.resolution_type}")
-        return None
-    
-    def close(self) -> None:
-        """Close BlueSky client and clean up resources."""
-        self.disconnect()
-        logger.info("BlueSky client closed")
+        states: List[Dict] = []
+        try:
+            # Use the stored traffic reference
+            traf = self.traf
+            n = traf.ntraf
+            for i in range(n):
+                cs = traf.id[i]
+                lat = float(traf.lat[i])
+                lon = float(traf.lon[i])
+                # Convert altitude from meters to feet (BlueSky uses meters)
+                alt_ft = float(traf.alt[i]) * 3.28084
+                # Use track (trk) instead of hdg if hdg not available
+                hdg = float(getattr(traf, 'hdg', getattr(traf, 'trk', [0]*n))[i])
+                # Convert speed from m/s to knots (BlueSky uses m/s)
+                tas_ms = float(getattr(traf, 'tas', [0]*n)[i])
+                spd_kt = tas_ms * 1.94384  # m/s to knots
+                # Convert vertical speed from m/s to fpm
+                vs_ms = float(getattr(traf, 'vs', [0]*n)[i])
+                roc_fpm = vs_ms * 196.8504  # m/s to ft/min
+                
+                states.append({
+                    "id": cs, "lat": lat, "lon": lon, "alt_ft": alt_ft,
+                    "hdg_deg": hdg, "spd_kt": spd_kt, "roc_fpm": roc_fpm
+                })
+            return states
+        except Exception as e:
+            log.exception("Direct traf arrays failed, fallback not implemented: %s", e)
+            return states
+

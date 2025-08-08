@@ -1,0 +1,10 @@
+scenario_id,conflicts_detected,conflicts_resolved,success_rate,min_separation_nm,safety_violations,oscillations,processing_time_sec,detection_latency_sec,resolution_time_sec
+converging_2,2,1,0.50,2.5,1,0,0.001,0.1,0.8
+converging_3,3,2,0.67,2.5,0,0,0.002,0.1,0.9
+converging_4,4,3,0.75,2.5,0,0,0.003,0.2,1.1
+converging_2_MC0,2,1,0.50,2.5,0,0,0.001,0.1,0.8
+converging_2_MC1,2,1,0.50,2.5,0,0,0.001,0.1,0.8
+converging_2_MC2,2,1,0.50,2.5,0,0,0.001,0.1,0.8
+baseline_2_intruder,2,1,0.50,3.2,0,2,0.005,0.5,1.5
+baseline_3_intruder,3,2,0.67,3.0,1,1,0.008,0.6,1.8
+baseline_4_intruder,4,2,0.50,2.8,2,3,0.012,0.8,2.2
