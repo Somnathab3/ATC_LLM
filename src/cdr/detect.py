@@ -159,14 +159,14 @@ def is_conflict(
     # Must occur in the future (or now) - diverging if tcpa < 0
     if time_to_cpa_min < 0:
         return False
+    
+    # If both horizontal and vertical minima exceed thresholds, no conflict
+    if distance_nm >= MIN_HORIZONTAL_SEP_NM and abs(altitude_diff_ft) >= MIN_VERTICAL_SEP_FT:
+        return False
         
     # Check separation standards
     horizontal_violation = distance_nm < MIN_HORIZONTAL_SEP_NM
-    vertical_violation = altitude_diff_ft < MIN_VERTICAL_SEP_FT
-    
-    # No conflict if either standard is maintained
-    if distance_nm >= MIN_HORIZONTAL_SEP_NM or altitude_diff_ft >= MIN_VERTICAL_SEP_FT:
-        return False
+    vertical_violation = abs(altitude_diff_ft) < MIN_VERTICAL_SEP_FT
     
     # Conflict requires both standards to be violated
     return horizontal_violation and vertical_violation

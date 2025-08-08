@@ -91,6 +91,24 @@ class Sprint5Reporter:
             df_data = [asdict(metrics) for metrics in metrics_data]
             df = pd.DataFrame(df_data)
             
+            # Map field names for compatibility  
+            field_mapping = {
+                'total_conflicts_detected': 'conflicts_detected',
+            }
+            df = df.rename(columns=field_mapping)
+            
+            # Ensure required columns exist with defaults
+            required_columns = {
+                'conflicts_detected': 0,
+                'conflicts_resolved': 0,
+                'safety_violations': 0,
+                'total_resolutions_issued': 0,
+                'successful_resolutions': 0
+            }
+            for col, default_val in required_columns.items():
+                if col not in df.columns:
+                    df[col] = default_val
+            
             # Add computed columns
             df['conflict_resolution_efficiency'] = (
                 df['successful_resolutions'] / df['total_resolutions_issued']
@@ -553,3 +571,27 @@ class Sprint5Reporter:
         logger.info(f"Reports saved to: {self.output_dir}")
         
         return package
+
+
+# Required headers for metrics CSV
+REQUIRED_HEADERS = [
+    "conflicts_detected","conflicts_resolved","loss_of_separation_events",
+    "TBAS","LAT","PA","PI","DAT","DFA","RE","RI","RAT"
+]
+
+def write_metrics_csv(path: str, rows: list[dict]) -> None:
+    """Write metrics to CSV with guaranteed headers."""
+    import csv
+    # union of required + present keys, stable order
+    present = set()
+    for r in rows:
+        present |= set(r.keys())
+    headers = REQUIRED_HEADERS + [h for h in sorted(present) if h not in REQUIRED_HEADERS]
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=headers)
+        w.writeheader()
+        for r in rows:
+            # make sure required keys exist
+            for k in REQUIRED_HEADERS:
+                r.setdefault(k, 0 if k.endswith("_detected") or k.endswith("_resolved") else 0.0)
+            w.writerow(r)

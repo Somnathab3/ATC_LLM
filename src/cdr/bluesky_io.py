@@ -10,7 +10,7 @@ This module provides a clean interface to BlueSky that:
 from __future__ import annotations
 import logging, time, math, os
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -99,45 +99,41 @@ class BlueSkyClient:
         return self.stack(f"FF {secs}")  # fast-forward; if unsupported, replace with your own tick loop
 
     # --- State fetch ---
-    def get_aircraft_states(self) -> List[Dict]:
+    def get_aircraft_states(self) -> list[dict[str, Any]]:
         """
         Return [{'id','lat','lon','alt_ft','hdg_deg','spd_kt','roc_fpm'}].
-        Try direct access to traf arrays if embedded; otherwise provide a fallback.
+        Fetches states from BlueSky traf arrays with proper unit conversions.
         """
-        states: List[Dict] = []
+        states: list[dict[str, Any]] = []
         try:
-            # Use the stored traffic reference
-            traf = self.traf
+            traf = self.traf  # set in connect()
             n = traf.ntraf
             for i in range(n):
+                # Common BlueSky arrays: id, lat, lon, alt [m], gs [m/s], hdg/trk [deg]
                 cs = traf.id[i]
                 lat = float(traf.lat[i])
                 lon = float(traf.lon[i])
-                # Convert altitude from meters to feet (BlueSky uses meters)
-                alt_ft = float(traf.alt[i]) * 3.28084
-                # Use track (trk) instead of hdg if hdg not available
-                hdg = float(getattr(traf, 'hdg', getattr(traf, 'trk', [0]*n))[i])
-                # Convert speed from m/s to knots (BlueSky uses m/s)
-                tas_ms = float(getattr(traf, 'tas', [0]*n)[i])
-                spd_kt = tas_ms * 1.94384  # m/s to knots
-                # Convert vertical speed from m/s to fpm
-                vs_ms = float(getattr(traf, 'vs', [0]*n)[i])
-                roc_fpm = vs_ms * 196.8504  # m/s to ft/min
-                
+                alt_ft = float(traf.alt[i]) * 3.28084  # m -> ft
+                spd_kt = float(traf.gs[i]) * 1.943844  # m/s -> kt
+                # Prefer heading if available, else use track
+                hdg_deg = float(getattr(traf, "hdg", getattr(traf, "trk", [0]*n))[i])
+                roc_fpm = float(getattr(traf, "vs", [0]*n)[i]) * 196.8504  # m/s -> fpm
+
                 states.append({
-                    "id": cs, "lat": lat, "lon": lon, "alt_ft": alt_ft,
-                    "hdg_deg": hdg, "spd_kt": spd_kt, "roc_fpm": roc_fpm
+                    "id": cs, "lat": lat, "lon": lon,
+                    "alt_ft": alt_ft, "hdg_deg": hdg_deg,
+                    "spd_kt": spd_kt, "roc_fpm": roc_fpm,
                 })
             return states
         except Exception as e:
-            log.exception("Direct traf arrays failed, fallback not implemented: %s", e)
+            log.exception("BS state fetch failed: %s", e)
             return states
     
     def direct_to_waypoint(self, cs: str, wpt: str) -> bool:
         """Convenience alias for direct_to method."""
         return self.direct_to(cs, wpt)
     
-    def execute_command(self, resolution) -> bool:
+    def execute_command(self, resolution: Any) -> bool:
         """Execute a resolution command."""
         try:
             if hasattr(resolution, 'resolution_type'):

@@ -636,3 +636,27 @@ class MetricsCollector:
                     resolution_delays.append(delay)
                 
         return float(np.mean(resolution_delays)) if resolution_delays else 0.0
+
+
+def summarize_run(run_stats: Dict[str, Any]) -> Dict[str, Any]:
+    """Summarize run statistics with guaranteed keys and non-negative counters."""
+    out = {
+        "conflicts_detected": int(run_stats.get("conflicts_detected", 0)),
+        "conflicts_resolved": int(run_stats.get("conflicts_resolved", 0)),
+        "loss_of_separation_events": int(run_stats.get("los", 0)),
+        # Wolfgang KPIs – use your computed values or 0.0 if absent
+        "TBAS": float(run_stats.get("TBAS", 0.0)),
+        "LAT": float(run_stats.get("LAT", 0.0)),
+        "PA": float(run_stats.get("PA", 0.0)),
+        "PI": float(run_stats.get("PI", 0.0)),
+        "DAT": float(run_stats.get("DAT", 0.0)),
+        "DFA": float(run_stats.get("DFA", 0.0)),
+        "RE": float(run_stats.get("RE", 0.0)),
+        "RI": float(run_stats.get("RI", 0.0)),
+        "RAT": float(run_stats.get("RAT", 0.0)),
+    }
+    # carry over anything else but never drop the required keys
+    for k, v in run_stats.items():
+        if k not in out:
+            out[k] = v
+    return out

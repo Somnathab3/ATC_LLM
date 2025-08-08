@@ -106,6 +106,8 @@ class DetectOut(BaseModel):
         default_factory=list,
         description="List of detected intruders with details"
     )
+    assessment: str = Field(default="No conflict assessment provided", 
+                          description="Natural language conflict assessment")
     
     class Config:
         extra = "allow"  # Allow additional fields from LLM
@@ -117,6 +119,8 @@ class ResolveOut(BaseModel):
     action: str = Field(..., description="Resolution action: turn, climb, or descend")
     params: Dict[str, Any] = Field(..., description="Action parameters")
     rationale: str = Field(..., description="Reasoning for the resolution")
+    recommended_resolution: str = Field(default="No specific resolution recommended",
+                                      description="Recommended resolution command")
     
     class Config:
         extra = "allow"  # Allow additional fields from LLM
