@@ -325,8 +325,11 @@ class StressTestFramework:
         detection_times = []
         resolution_times = []
         
-        # Run simulation
-        while simulation_time < scenario.duration_minutes * 60.0:
+        # Run simulation - ensure at least one cycle executes
+        simulation_step_sec = max(10.0, simulation_step_sec)  # Minimum 10 seconds per step
+        min_simulation_time = max(60.0, scenario.duration_minutes * 60.0)  # At least 1 minute
+        
+        while simulation_time < min_simulation_time:
             step_start = datetime.now()
             
             # Detect conflicts

@@ -24,6 +24,9 @@ class BlueSkyClient:
     def __init__(self, cfg):
         self.cfg = cfg
         self.bs = None  # handle to embedded bluesky or API wrapper
+        # Add host attribute expected by tests
+        self.host = getattr(cfg, 'bluesky_host', '127.0.0.1')
+        self.port = getattr(cfg, 'bluesky_port', 5555)
 
     def _ensure_cache_dir(self):
         # Prevent earlier cache error on Windows
@@ -129,4 +132,26 @@ class BlueSkyClient:
         except Exception as e:
             log.exception("Direct traf arrays failed, fallback not implemented: %s", e)
             return states
+    
+    def direct_to_waypoint(self, cs: str, wpt: str) -> bool:
+        """Convenience alias for direct_to method."""
+        return self.direct_to(cs, wpt)
+    
+    def execute_command(self, resolution) -> bool:
+        """Execute a resolution command."""
+        try:
+            if hasattr(resolution, 'resolution_type'):
+                if resolution.new_heading_deg is not None:
+                    return self.set_heading(resolution.target_aircraft, resolution.new_heading_deg)
+                elif resolution.new_altitude_ft is not None:
+                    return self.set_altitude(resolution.target_aircraft, resolution.new_altitude_ft)
+            return False
+        except Exception as e:
+            log.exception(f"Error executing resolution command: {e}")
+            return False
+    
+    def close(self):
+        """Clean up resources."""
+        # Clean up BlueSky if needed
+        pass
 

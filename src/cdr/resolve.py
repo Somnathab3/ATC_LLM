@@ -677,5 +677,26 @@ def to_bluesky_command(
     Returns:
         BlueSky command string (e.g., "HDG KLM123 090")
     """
-    # TODO: Implement in Sprint 2
-    return f"# TODO: {aircraft_id}"  # Placeholder return
+    if resolution.new_heading_deg is not None:
+        return to_bluesky_command_heading(aircraft_id, resolution.new_heading_deg)
+    elif resolution.new_altitude_ft is not None:
+        return to_bluesky_command_altitude(aircraft_id, resolution.new_altitude_ft)
+    elif resolution.new_speed_kt is not None:
+        return to_bluesky_command_speed(aircraft_id, resolution.new_speed_kt)
+    else:
+        return f"# TODO: {aircraft_id}"  # Fallback
+
+
+def to_bluesky_command_heading(callsign: str, hdg_deg: float) -> str:
+    """Convert heading command to BlueSky format."""
+    return f"{callsign} HDG {int(round(hdg_deg))}"
+
+
+def to_bluesky_command_altitude(callsign: str, alt_ft: float) -> str:
+    """Convert altitude command to BlueSky format."""
+    return f"{callsign} ALT {int(round(alt_ft))}"
+
+
+def to_bluesky_command_speed(callsign: str, spd_kt: float) -> str:
+    """Convert speed command to BlueSky format."""
+    return f"{callsign} SPD {int(round(spd_kt))}"

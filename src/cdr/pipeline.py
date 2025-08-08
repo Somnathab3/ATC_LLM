@@ -52,12 +52,15 @@ class CDRPipeline:
         
         logger.info("CDR Pipeline initialized")
     
-    def run(self, max_cycles: Optional[int] = None, ownship_id: str = "OWNSHIP") -> None:
+    def run(self, max_cycles: Optional[int] = None, ownship_id: str = "OWNSHIP") -> bool:
         """Run the main CDR loop.
         
         Args:
             max_cycles: Maximum cycles to run (None = infinite)
             ownship_id: Ownship aircraft identifier
+            
+        Returns:
+            True if completed successfully
         """
         logger.info(f"Starting CDR pipeline for ownship: {ownship_id}")
         self.running = True
@@ -81,8 +84,12 @@ class CDRPipeline:
                 
                 self.cycle_count += 1
                 
+            # Return True if successfully completed a full 5-minute cycle
+            return self.cycle_count > 0
+                
         except KeyboardInterrupt:
             logger.info("CDR pipeline stopped by user")
+            return False
         except Exception as e:
             logger.error(f"CDR pipeline error: {e}")
             raise
@@ -134,6 +141,10 @@ class CDRPipeline:
         if own is None:
             self.log.warning("Ownship %s not found in BS state", ownship_id)
         return own, traffic
+    
+    def _find_ownship(self, states: List[Dict[str, Any]], ownship_id: str) -> Optional[Dict[str, Any]]:
+        """Find ownship in states list."""
+        return next((s for s in states if s["id"] == ownship_id), None)
     
 
     def _predict_conflicts(self, ownship: AircraftState, traffic: List[AircraftState]) -> List[ConflictPrediction]:

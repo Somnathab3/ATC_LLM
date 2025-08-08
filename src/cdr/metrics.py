@@ -420,8 +420,23 @@ class MetricsCollector:
         """
         summary = self.generate_summary()
         
+        # Create output with expected canonical fields for tests
+        output = {
+            "conflicts_detected": int(summary.total_conflicts_detected),
+            "conflicts_resolved": int(len(self.resolutions_issued)),
+            "loss_of_separation_events": int(summary.false_negatives),  # LOS events
+            "total_conflicts_detected": int(summary.total_conflicts_detected),
+            "successful_resolutions": int(len([r for r in self.resolutions_issued if hasattr(r, 'is_validated') and r.is_validated])),
+            "false_positives": int(summary.false_positives),
+            "false_negatives": int(summary.false_negatives),
+            "detection_accuracy": float(summary.detection_accuracy),
+            "tbas": float(summary.tbas),
+            "lat": float(summary.lat),
+            "summary": asdict(summary)
+        }
+        
         with open(filepath, 'w') as f:
-            json.dump(asdict(summary), f, indent=2, default=str)
+            json.dump(output, f, indent=2, default=str)
         
         logger.info(f"Metrics report saved to {filepath}")
     

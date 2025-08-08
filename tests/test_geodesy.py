@@ -27,8 +27,8 @@ class TestHaversine:
         
         distance = haversine_nm(stockholm, gothenburg)
         
-        # Expected distance is approximately 244 nautical miles
-        assert 240 < distance < 250
+        # Expected distance is approximately 214.3 nautical miles (great-circle distance)
+        assert distance == pytest.approx(214.3, abs=2.0)
     
     def test_haversine_equator_distance(self):
         """Test distance calculation along equator."""
