@@ -10,7 +10,7 @@
   "tbas": 0.0,
   "lat": 0.0,
   "summary": {
-    "total_simulation_time_min": 0.0048470833333333335,
+    "total_simulation_time_min": 0.0,
     "total_cycles": 0,
     "avg_cycle_time_sec": 0.0,
     "total_conflicts_detected": 0,
@@ -34,6 +34,6 @@
     "successful_resolutions": 0,
     "resolution_success_rate": 0.0,
     "avg_resolution_time_sec": 0.0,
-    "run_label": "llm"
+    "run_label": "run"
   }
 }

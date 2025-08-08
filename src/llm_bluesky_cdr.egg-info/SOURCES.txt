@@ -22,10 +22,14 @@ src/llm_bluesky_cdr.egg-info/PKG-INFO
 src/llm_bluesky_cdr.egg-info/SOURCES.txt
 src/llm_bluesky_cdr.egg-info/dependency_links.txt
 src/llm_bluesky_cdr.egg-info/top_level.txt
+tests/test_acceptance.py
 tests/test_bluesky_io.py
 tests/test_bluesky_io_smoke.py
+tests/test_bluesky_states.py
+tests/test_compat_layer.py
 tests/test_detect.py
 tests/test_detect_smoke.py
+tests/test_fetch_states.py
 tests/test_geodesy.py
 tests/test_llm_client_smoke.py
 tests/test_llm_integration.py
