@@ -4,668 +4,275 @@
 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Status](https://img.shields.io/badge/Status-Production_Ready-brightgreen.svg)
-![Coverage](https://img.shields.io/badge/Coverage-85%25-brightgreen.svg)
-![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg)
+![Status](https://img.shields.io/badge/Status-Active_Development-yellow.svg)
 
-**An advanced LLM-driven conflict detection and resolution system for aviation built on BlueSky simulator**
+**An intelligent Air Traffic Control system combining traditional conflict detection with Large Language Model capabilities**
 
-[🚀 Quick Start](#-quick-start) •
-[📚 Documentation](#-features) •
-[🔌 CLI Reference](#-command-line-interface) •
-[🏗️ Architecture](#-architecture) •
-[🤝 Contributing](#-contributing)
+[🚀 Quick Start](#-quick-start) • [� Usage](#-usage) • [� Installation](#-installation) • [🤝 Contributing](#-contributing)
 
 </div>
 
----
+## 🎯 What is this?
 
-## 🎯 Overview
+This system combines traditional geometric conflict detection algorithms with Large Language Model (LLM) intelligence to create an advanced Air Traffic Control solution. It uses the BlueSky aviation simulator to test and validate conflict detection and resolution strategies.
 
-The **LLM-BlueSky CDR System** is a cutting-edge Air Traffic Control (ATC) solution that revolutionizes automated air traffic management by combining traditional geometric conflict detection algorithms with Large Language Model intelligence. This system provides a safety-first approach to automated conflict resolution with comprehensive testing, real-world data integration, and research-standard performance metrics.
-
-### ✅ Production Status: **Fully Operational**
-
-- ✅ **LLM Integration**: Complete integration with Ollama for intelligent conflict resolution
-- ✅ **Safety Compliance**: ICAO separation standards (5NM/1000ft minimums) with safety buffers
-- ✅ **Real Data Support**: SCAT dataset integration with ASTERIX Category 062 data processing
-- ✅ **Performance Metrics**: Wolfgang (2011) KPIs implementation for research validation
-- ✅ **Production Ready**: REST API, comprehensive testing, monitoring, and batch processing
-- ✅ **CLI Interface**: Unified command-line interface for all operations
-- ✅ **Scalable Architecture**: Modular design supporting multiple concurrent operations
-
----
-
-## 🚀 Key Features
-
-### 🤖 Intelligent Conflict Resolution
-- **Context-Aware LLM Prompts**: Detailed scenario information with navigation constraints and real-time context
-- **Waypoint Intelligence**: Strategic rerouting using nearby navigation aids and standard instrument procedures
-- **Multiple Resolution Types**: Turn maneuvers, altitude changes, speed adjustments, and direct-to-waypoint navigation
-- **Safety-First Instructions**: Clear constraints on separation maintenance, weather avoidance, and destination reaching
-- **Real-Time Decision Making**: Sub-second conflict analysis with intelligent resolution strategies
-
-### 🛩️ Advanced Flight Dynamics & Simulation
-- **Heading-Based Movement**: Aircraft follow LLM guidance with realistic navigation and autopilot behavior
-- **Conflict Avoidance Maneuvers**: Authentic aircraft movement patterns with physics-based modeling
-- **Mission Constraint Awareness**: LLM considers fuel efficiency, passenger comfort, and operational requirements
-- **Navigation Intelligence**: Integration with real-world waypoint data and airway structures
-- **Multi-Aircraft Coordination**: Simultaneous management of complex airspace with multiple conflicts
-
-### 📊 Comprehensive Analytics & Reporting
-- **Wolfgang (2011) KPIs**: Research-standard performance metrics for academic validation
-- **Real-Time Monitoring**: Live conflict detection and resolution tracking with detailed logs
-- **Comparative Analysis**: Baseline vs LLM performance evaluation with statistical significance
-- **Visual Reports**: Interactive charts, graphs, and performance summaries with export capabilities
-- **Batch Processing**: Large-scale scenario analysis with Monte Carlo simulation support
-
-### 🔄 Production-Grade Operations
-- **SCAT Data Processing**: Real-world aviation data ingestion and processing pipeline
-- **Batch Processing**: High-throughput processing of multiple flight scenarios
-- **Health Monitoring**: Comprehensive system health checks and diagnostics
-- **API Integration**: RESTful API for system integration and external tool compatibility
-- **Error Recovery**: Robust error handling with graceful degradation and recovery mechanisms
-
----
-
-## 📋 Table of Contents
-
-- [🚀 Quick Start](#-quick-start)
-- [🔧 Installation](#-installation)
-- [⚙️ Configuration](#-configuration)
-- [🖥️ Command Line Interface](#-command-line-interface)
-- [📖 Usage Examples](#-usage-examples)
-- [🏗️ Architecture](#-architecture)
-- [🔌 API Reference](#-api-reference)
-- [💻 Development](#-development)
-- [🧪 Testing](#-testing)
-- [📊 Performance Metrics](#-performance-metrics)
-- [🔍 Troubleshooting](#-troubleshooting)
-- [🤝 Contributing](#-contributing)
-- [📄 License](#-license)
-
----
+**Key Capabilities:**
+- 🛩️ **Aircraft Conflict Detection**: Automatically detects when aircraft are on collision courses
+- 🤖 **AI-Powered Resolution**: Uses LLMs to generate intelligent conflict resolution strategies  
+- 🧪 **Realistic Simulation**: Built on BlueSky simulator for authentic flight dynamics
+- 📊 **Performance Analysis**: Comprehensive metrics and reporting
+- 🔄 **Real Data Support**: Works with real aviation data (SCAT format)
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### What You Need
 
-- **Python 3.11** or higher
-- **Git** for repository cloning
-- **8GB+ RAM** (recommended for BlueSky simulation)
-- **[Ollama](https://ollama.ai/)** installed locally for LLM integration
-- **BlueSky Simulator** (automatically installed with dependencies)
+- **Python 3.11+** 
+- **8GB+ RAM** (for simulation)
+- **[Ollama](https://ollama.ai/)** for LLM integration
 
-### 1. Installation
+### 1. Install the System
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/llm-bluesky-cdr.git
-cd llm-bluesky-cdr
+git clone <your-repo-url>
+cd ATC_LLM
 
 # Install dependencies
 pip install -r requirements.txt
-pip install -e .
-
-# Make CLI executable
-chmod +x bin/atc-llm.py  # Linux/macOS
 ```
 
 ### 2. Setup LLM Backend
 
 ```bash
-# Install and start Ollama
+# Install and start Ollama (in a separate terminal)
 ollama pull llama3.1:8b
-ollama serve  # Keep this running in a separate terminal
+ollama serve
 ```
 
-### 3. Quick System Check
+### 3. Run Your First Test
 
 ```bash
-# Verify all components are working
-python bin/atc-llm.py health-check
+# Check system health
+python cli.py health-check
+
+# Run a basic simulation
+python bin/complete_llm_demo.py
 ```
 
-### 4. Run Your First Simulation
+## � Usage
+
+### Available Commands
+
+The system provides several ways to run simulations:
 
 ```bash
-# Basic simulation with generated scenarios
-python bin/atc-llm.py simulate basic --aircraft 5 --duration 30
+# Command-line interface (recommended for beginners)
+python cli.py --help
 
-# Or with real SCAT data
-python bin/atc-llm.py simulate scat --scat-dir /path/to/scat --max-flights 3
+# Pre-built demo scripts
+python bin/complete_llm_demo.py              # Basic LLM demo
+python bin/complete_scat_llm_simulation.py   # Full simulation with real data
+python bin/enhanced_scat_llm_simulation.py   # Advanced features demo
 ```
 
----
+### Quick Examples
+
+**Run a basic conflict detection demo:**
+```bash
+python bin/complete_llm_demo.py
+```
+
+**Process real aviation data (if you have SCAT files):**
+```bash
+python bin/complete_scat_llm_simulation.py
+```
+
+**Check what's available:**
+```bash
+python cli.py --help
+```
 
 ## 🔧 Installation
 
 ### System Requirements
 
-#### Minimum Requirements
-- **OS**: Windows 10/11, macOS 10.15+, or Ubuntu 18.04+
-- **RAM**: 4GB (8GB recommended)
+- **Operating System**: Windows 10/11, macOS 10.15+, or Ubuntu 18.04+
+- **RAM**: 8GB recommended (4GB minimum)
 - **Storage**: 2GB free space
-- **Network**: Internet connection for LLM model downloads
+- **Python**: Version 3.11 or higher
+- **Internet**: Required for downloading LLM models
 
-#### Recommended Requirements
-- **OS**: Windows 11 or Ubuntu 20.04+
-- **RAM**: 16GB for large-scale batch processing
-- **CPU**: Multi-core processor for parallel simulation
-- **Storage**: 10GB for datasets and results
+### Step-by-Step Installation
 
-### Installation Methods
-
-#### Method 1: Standard Installation (Recommended)
-
+#### 1. Clone the Repository
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/llm-bluesky-cdr.git
-cd llm-bluesky-cdr
-
-# Create virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# or
-venv\Scripts\activate     # Windows
-
-# Install dependencies
-pip install -r requirements.txt
-pip install -e .
+git clone <your-repository-url>
+cd ATC_LLM
 ```
 
-#### Method 2: Development Installation
-
+#### 2. Set Up Python Environment (Recommended)
 ```bash
-# For contributors and developers
-git clone https://github.com/your-username/llm-bluesky-cdr.git
-cd llm-bluesky-cdr
+# Create virtual environment
+python -m venv .venv
 
-# Install with development dependencies
-pip install -r requirements.txt
-pip install -e ".[dev]"
-
-# Install pre-commit hooks
-pre-commit install
+# Activate it
+# On Windows:
+.venv\Scripts\activate
+# On macOS/Linux:
+source .venv/bin/activate
 ```
 
-### Dependency Overview
+#### 3. Install Dependencies
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
 
-#### Core Dependencies
-- **numpy**: Numerical computations for conflict detection algorithms
-- **pandas**: Data manipulation and analysis for flight records
-- **pydantic**: Data validation and serialization with type safety
-- **bluesky-simulator**: Aviation simulation engine for realistic flight modeling
+#### 4. Install Ollama (LLM Backend)
+- Visit [https://ollama.ai/](https://ollama.ai/) 
+- Download and install for your operating system
+- Pull the required model:
+```bash
+ollama pull llama3.1:8b
+```
 
-#### LLM Integration
-- **requests**: HTTP communication with Ollama API
-- **ollama**: Python client for Ollama integration
-- **transformers**: Hugging Face transformers library (optional)
+#### 5. Verify Installation
+```bash
+python cli.py health-check
+```
 
-#### Web Framework
-- **fastapi**: REST API framework for system integration
-- **uvicorn**: ASGI web server for production deployment
-- **websockets**: Real-time communication support
-
-#### Development Tools
-- **pytest**: Comprehensive testing framework with fixtures
-- **pytest-cov**: Code coverage analysis and reporting
-- **black**: Automatic code formatting
-- **ruff**: Fast Python linter and code quality checker
-- **mypy**: Static type checking and analysis
-
----
+If everything is working, you should see a success message!
 
 ## ⚙️ Configuration
 
-### Configuration File
+The system can be configured through environment variables or configuration files. For most users, the default settings work well.
 
-The system uses a centralized configuration system via `src/cdr/schemas.py`:
+### Basic Configuration
 
-```python
-from src.cdr.schemas import ConfigurationSettings
+Create a `.env` file in the project root if you need to customize settings:
 
-# Basic configuration
-config = ConfigurationSettings(
-    # LLM settings
-    llm_model_name="llama3.1:8b",
-    llm_temperature=0.1,
-    llm_max_tokens=2048,
-    
-    # Safety parameters
-    min_horizontal_separation_nm=5.0,
-    min_vertical_separation_ft=1000.0,
-    safety_buffer_factor=1.2,
-    
-    # Simulation settings
-    polling_interval_min=1.0,
-    lookahead_time_min=10.0,
-    
-    # BlueSky connection
-    bluesky_host="localhost",
-    bluesky_port=1337,
-    bluesky_timeout_sec=10.0
-)
+```env
+# LLM Configuration
+OLLAMA_BASE_URL=http://localhost:11434
+LLM_MODEL=llama3.1:8b
+
+# Simulation Settings
+MAX_AIRCRAFT=10
+SIMULATION_DURATION_MINUTES=30
 ```
 
-### Environment Variables
+### Advanced Users
+
+Configuration is managed through `src/cdr/schemas.py`. You can modify parameters like:
+- Minimum separation distances
+- LLM model settings
+- Simulation parameters
+
+## � Troubleshooting
+
+### Common Issues
+
+**Ollama not working:**
+```bash
+# Make sure Ollama is running
+ollama serve
+
+# Check if model is available
+ollama list
+```
+
+**Python dependency issues:**
+```bash
+# Update pip and reinstall
+pip install --upgrade pip
+pip install -r requirements.txt --force-reinstall
+```
+
+**System health check fails:**
+```bash
+python cli.py health-check --verbose
+```
+
+### Getting Help
+
+1. Run the health check: `python cli.py health-check`
+2. Check the logs in the `logs/` directory
+3. Look at existing issues in the GitHub repository
+4. Create a new issue with your error message and system info
+## 🧪 Testing
+
+Run the test suite to verify everything is working:
 
 ```bash
-# Optional environment variables
-export SCAT_DIR="/path/to/scat/data"
-export OLLAMA_HOST="http://localhost:11434"
-export BLUESKY_HOST="localhost"
-export BLUESKY_PORT="1337"
-export LOG_LEVEL="INFO"
+# Run all tests
+python -m pytest
+
+# Run tests with coverage
+python -m pytest --cov=src
+
+# Run a specific test
+python -m pytest tests/test_specific.py -v
 ```
 
-### Advanced Configuration
+## 📁 Project Structure
 
-```python
-# Production configuration with enhanced settings
-config = ConfigurationSettings(
-    # Enhanced LLM settings
-    llm_model_name="llama3.1:8b",
-    llm_temperature=0.1,
-    llm_max_tokens=4096,
-    llm_timeout_sec=30.0,
-    
-    # Advanced safety parameters
-    min_horizontal_separation_nm=5.0,
-    min_vertical_separation_ft=1000.0,
-    safety_buffer_factor=1.5,
-    emergency_separation_factor=2.0,
-    
-    # Performance tuning
-    max_concurrent_resolutions=5,
-    batch_size=10,
-    cache_enabled=True,
-    
-    # Monitoring and logging
-    enable_metrics=True,
-    log_level="INFO",
-    performance_monitoring=True
-)
 ```
+ATC_LLM/
+├── src/                    # Core system code
+│   ├── cdr/               # Conflict detection & resolution
+│   └── api/               # REST API (optional)
+├── bin/                   # Ready-to-run scripts
+├── tests/                 # Test suite
+├── cli.py                 # Command line interface
+├── requirements.txt       # Dependencies
+└── README.md             # This file
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Here's how to get started:
+
+1. **Fork** the repository
+2. **Create** a feature branch: `git checkout -b my-feature`
+3. **Make** your changes
+4. **Test** your changes: `python -m pytest`
+5. **Submit** a pull request
+
+### Development Setup
+
+```bash
+# Clone your fork
+git clone https://github.com/your-username/ATC_LLM.git
+cd ATC_LLM
+
+# Install development dependencies
+pip install -r requirements.txt
+pip install -e .
+
+# Run tests
+python -m pytest
+```
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## � Acknowledgments
+
+- **BlueSky Team**: For the excellent aviation simulation platform
+- **Ollama Team**: For making LLM integration accessible
+- **Research Community**: For aviation conflict detection standards
 
 ---
 
-## 🖥️ Command Line Interface
+<div align="center">
 
-The system provides a comprehensive CLI for all operations through `bin/atc-llm.py`:
+**Built for Aviation Safety and AI Research**
 
-### Core Commands
+[⬆️ Back to Top](#llm-bluesky-conflict-detection--resolution-system)
 
-#### System Health Check
-```bash
-# Check all system components
-python bin/atc-llm.py health-check
-
-# Verbose health check with detailed output
-python bin/atc-llm.py health-check --verbose
-```
-
-#### Simulations
-
-```bash
-# Basic simulation with generated scenarios
-python bin/atc-llm.py simulate basic --aircraft 5 --duration 30 --llm-model llama3.1:8b
-
-# SCAT data simulation
-python bin/atc-llm.py simulate scat \
-    --scat-dir /path/to/scat \
-    --max-flights 5 \
-    --scenarios-per-flight 3 \
-    --output-dir results/
-
-# Real-time simulation with custom parameters
-python bin/atc-llm.py simulate basic \
-    --aircraft 10 \
-    --duration 60 \
-    --conflict-probability 0.4 \
-    --verbose
-```
-
-#### Batch Processing
-
-```bash
-# Production batch processing
-python bin/atc-llm.py batch production \
-    --scat-dir /path/to/scat \
-    --max-flights 10 \
-    --scenarios-per-flight 5 \
-    --output-dir production_results/
-
-# Skip prerequisite checks (for automated environments)
-python bin/atc-llm.py batch production \
-    --skip-checks \
-    --max-flights 20
-```
-
-#### Performance Comparison
-
-```bash
-# Compare baseline vs LLM performance
-python bin/atc-llm.py compare \
-    --scat-path /path/to/scat \
-    --max-flights 5 \
-    --time-window 30 \
-    --output comparison_results.json
-
-# Extended comparison with detailed metrics
-python bin/atc-llm.py compare \
-    --scat-path /path/to/scat \
-    --max-flights 10 \
-    --time-window 60 \
-    --include-visualizations \
-    --verbose
-```
-
-#### Testing and Quality Assurance
-
-```bash
-# Run complete test suite
-python bin/atc-llm.py test
-
-# Run tests with coverage report
-python bin/atc-llm.py test --coverage
-
-# Run specific test patterns
-python bin/atc-llm.py test --test-pattern "test_llm*" --verbose
-
-# Performance testing
-python bin/atc-llm.py test --test-pattern "test_performance*" --benchmark
-```
-
-#### API Server
-
-```bash
-# Start development server
-python bin/atc-llm.py server --port 8000 --debug
-
-# Start production server
-python bin/atc-llm.py server --host 0.0.0.0 --port 8080
-
-# Start with custom configuration
-python bin/atc-llm.py server \
-    --host 127.0.0.1 \
-    --port 9000 \
-    --workers 4 \
-    --log-level info
-```
-
-#### LLM Operations
-
-```bash
-# Verify LLM connectivity
-python bin/atc-llm.py verify-llm --model llama3.1:8b
-
-# Test LLM with custom prompts
-python bin/atc-llm.py verify-llm \
-    --model llama3.1:8b \
-    --test-conflict-detection \
-    --test-resolution-generation
-```
-
-#### Visualization and Analysis
-
-```bash
-# Generate conflict visualizations
-python bin/atc-llm.py visualize \
-    --data-file results/simulation_results.json \
-    --output-dir visualizations/
-
-# Create performance dashboards
-python bin/atc-llm.py visualize \
-    --data-file results/batch_results.json \
-    --dashboard \
-    --include-metrics
-```
-
-### Command Reference
-
-| Command | Purpose | Key Options |
-|---------|---------|-------------|
-| `health-check` | Verify system health | `--verbose` |
-| `simulate basic` | Basic simulation | `--aircraft`, `--duration`, `--llm-model` |
-| `simulate scat` | SCAT data simulation | `--scat-dir`, `--max-flights`, `--scenarios-per-flight` |
-| `batch production` | Production batch processing | `--scat-dir`, `--max-flights`, `--skip-checks` |
-| `compare` | Performance comparison | `--scat-path`, `--max-flights`, `--time-window` |
-| `test` | Run test suite | `--coverage`, `--test-pattern` |
-| `server` | Start API server | `--host`, `--port`, `--debug` |
-| `verify-llm` | LLM connectivity test | `--model` |
-| `visualize` | Generate visualizations | `--data-file`, `--output-dir` |
-
----
-
-## 📖 Usage Examples
-
-### Example 1: Quick Start Simulation
-
-```bash
-# 1. Check system health
-python bin/atc-llm.py health-check
-
-# 2. Run basic simulation
-python bin/atc-llm.py simulate basic \
-    --aircraft 5 \
-    --duration 30 \
-    --verbose
-
-# 3. View results
-ls Output/
-```
-
-### Example 2: SCAT Data Processing
-
-```bash
-# Process real aviation data
-python bin/atc-llm.py simulate scat \
-    --scat-dir /data/scat_extracted \
-    --max-flights 10 \
-    --scenarios-per-flight 5 \
-    --output-dir scat_results/ \
-    --verbose
-
-# Generate summary report
-# Analysis tools moved to tests/ scat_results/
-```
-
-### Example 3: Performance Comparison
-
-```bash
-# Compare baseline vs LLM performance
-python bin/atc-llm.py compare \
-    --scat-path /data/scat_extracted \
-    --max-flights 8 \
-    --time-window 45 \
-    --output detailed_comparison.json
-
-# Visualize results
-python bin/atc-llm.py visualize \
-    --data-file detailed_comparison.json \
-    --output-dir comparison_viz/
-```
-
-### Example 4: Production Batch Processing
-
-```bash
-# Run production batch with health checks
-python bin/atc-llm.py batch production \
-    --scat-dir /production/scat_data \
-    --max-flights 50 \
-    --scenarios-per-flight 10 \
-    --output-dir /production/results
-
-# Process results
-# Analysis tools moved to tests/ /production/results
-```
-
-### Example 5: Development and Testing
-
-```bash
-# Run comprehensive tests
-python bin/atc-llm.py test --coverage --verbose
-
-# Start development server
-python bin/atc-llm.py server --debug --port 8000
-
-# Verify LLM integration
-python bin/atc-llm.py verify-llm --model llama3.1:8b
-```
-
----
-
-## 🏗️ Architecture
-
-### System Overview
-
-The system follows a modular, safety-first architecture designed for production aviation environments:
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   REST API      │    │   CDR Pipeline   │    │   BlueSky       │
-│   (FastAPI)     │◄──►│   (Orchestrator) │◄──►│   (Simulator)   │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                        │                        │
-         ▼                        ▼                        ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   CLI Interface │    │   LLM Client     │    │   SCAT Adapter  │
-│   (User Tools)  │    │   (Ollama)       │    │   (Real Data)   │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
-
-### Component Architecture
-
-#### 1. Foundation Layer
-- **`schemas.py`**: Pydantic data models with validation and serialization
-- **`geodesy.py`**: Aviation mathematics and geographic calculations
-- **`metrics.py`**: Performance measurement and Wolfgang (2011) KPIs
-
-#### 2. Data Integration Layer
-- **`bluesky_io.py`**: BlueSky simulator interface and aircraft control
-- **`scat_adapter.py`**: Real aviation data processing and ASTERIX decoding
-- **`monte_carlo_intruders.py`**: Synthetic scenario generation
-
-#### 3. Algorithm Layer
-- **`detect.py`**: Geometric conflict detection with configurable parameters
-- **`resolve.py`**: Resolution execution with safety validation
-- **`llm_client.py`**: Large Language Model integration via Ollama
-
-#### 4. Orchestration Layer
-- **`pipeline.py`**: Main CDR pipeline with 5-minute polling cycles
-- **`batch_processing.py`**: High-throughput batch operation management
-- **`reporting.py`**: Comprehensive report generation and analytics
-
-#### 5. Interface Layer
-- **`api/service.py`**: REST API for external system integration
-- **`cli.py`**: Command-line interface for all operations
-
-### Data Flow Architecture
-
-```mermaid
-graph TD
-    A[SCAT Data] --> B[Aircraft States]
-    B --> C[Conflict Detection]
-    C --> D{Conflict?}
-    D -->|Yes| E[LLM Analysis]
-    D -->|No| F[Continue Monitoring]
-    E --> G[Resolution Generation]
-    G --> H[Safety Validation]
-    H --> I[Execute Resolution]
-    I --> J[Update BlueSky]
-    J --> K[Collect Metrics]
-    K --> F
-    F --> B
-```
-
-### Safety Architecture
-
-- **Multi-Layer Validation**: Geometric validation → LLM reasoning → Safety validation
-- **Separation Buffers**: Configurable safety margins beyond ICAO minimums
-- **Fallback Mechanisms**: Automatic degradation to baseline algorithms if LLM fails
-- **Real-Time Monitoring**: Continuous safety parameter monitoring
-- **Emergency Procedures**: Immediate conflict resolution for critical situations
-
----
-
-## 🔌 API Reference
-
-### REST API Endpoints
-
-#### Core System Control
-
-**Health Check**
-```http
-GET /health
-Response: {
-  "status": "healthy",
-  "components": {
-    "bluesky": "connected",
-    "llm": "available",
-    "database": "operational"
-  },
-  "timestamp": "2024-01-15T10:30:00Z"
-}
-```
-
-**System Configuration**
-```http
-GET /config
-Response: {
-  "llm_model": "llama3.1:8b",
-  "safety_parameters": {
-    "min_separation_nm": 5.0,
-    "min_separation_ft": 1000.0,
-    "safety_buffer_factor": 1.2
-  }
-}
-
-PUT /config
-Content-Type: application/json
-{
-  "llm_model": "llama3.1:8b",
-  "conflict_lookahead_minutes": 15.0,
-  "safety_buffer_factor": 1.5
-}
-```
-
-#### Simulation Control
-
-**Start Simulation**
-```http
-POST /simulation/start
-Content-Type: application/json
-{
-  "scenario_type": "basic",
-  "aircraft_count": 5,
-  "duration_minutes": 30,
-  "enable_llm": true
-}
-```
-
-**Get Simulation Status**
-```http
-GET /simulation/{simulation_id}/status
-Response: {
-  "simulation_id": "sim_123",
-  "status": "running",
-  "progress": 0.65,
-  "conflicts_detected": 3,
-  "resolutions_applied": 2,
-  "elapsed_time_sec": 1200
-}
-```
-
-#### Conflict Detection and Resolution
-
-**Detect Conflicts**
-```http
-POST /conflicts/detect
-Content-Type: application/json
-{
-  "ownship": {
-    "callsign": "UAL123",
+</div>
     "latitude": 40.7128,
     "longitude": -74.0060,
     "altitude_ft": 35000,
