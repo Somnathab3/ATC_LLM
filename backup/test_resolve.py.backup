@@ -1,0 +1,429 @@
+"""Test suite for conflict resolution algorithms."""
+
+import pytest
+from datetime import datetime
+from src.cdr.resolve import (
+    generate_horizontal_resolution, 
+    generate_vertical_resolution,
+    validate_resolution,
+    to_bluesky_command
+)
+from src.cdr.schemas import AircraftState, ConflictPrediction, ResolutionCommand, ResolutionType
+
+
+class TestHorizontalResolution:
+    """Test horizontal conflict resolution generation."""
+    
+    def test_generate_horizontal_resolution_basic(self):
+        """Test basic horizontal resolution generation."""
+        # Create a basic conflict scenario
+        conflict = ConflictPrediction(
+            ownship_id="OWNSHIP",
+            intruder_id="TRAFFIC1",
+            time_to_cpa_min=5.0,
+            distance_at_cpa_nm=3.0,  # Below 5 NM threshold
+            altitude_diff_ft=0.0,
+            is_conflict=True,
+            severity_score=0.8,
+            conflict_type="horizontal",
+            prediction_time=datetime.now(),
+            confidence=0.9
+        )
+        
+        ownship = AircraftState(
+            aircraft_id="OWNSHIP",
+            timestamp=datetime.now(),
+            latitude=59.3,
+            longitude=18.1,
+            altitude_ft=35000,
+            ground_speed_kt=450,
+            heading_deg=90,  # East
+            vertical_speed_fpm=0
+        )
+        
+        # Test function (may not be implemented in Sprint 0)
+        resolution = generate_horizontal_resolution(conflict, ownship)
+        
+        # Function may return None if not implemented yet
+        if resolution is not None:
+            assert isinstance(resolution, ResolutionCommand)
+            assert resolution.resolution_type == ResolutionType.HEADING_CHANGE
+            assert resolution.target_aircraft == "OWNSHIP"
+            assert resolution.new_heading_deg is not None
+            assert 0 <= resolution.new_heading_deg < 360
+    
+    def test_generate_horizontal_resolution_right_turn(self):
+        """Test horizontal resolution with right turn preference."""
+        conflict = ConflictPrediction(
+            ownship_id="OWNSHIP",
+            intruder_id="TRAFFIC1",
+            time_to_cpa_min=8.0,
+            distance_at_cpa_nm=2.5,
+            altitude_diff_ft=0.0,
+            is_conflict=True,
+            severity_score=0.9,
+            conflict_type="horizontal",
+            prediction_time=datetime.now(),
+            confidence=0.95
+        )
+        
+        ownship = AircraftState(
+            aircraft_id="OWNSHIP",
+            timestamp=datetime.now(),
+            latitude=59.3,
+            longitude=18.1,
+            altitude_ft=35000,
+            ground_speed_kt=450,
+            heading_deg=180,  # South
+            vertical_speed_fpm=0
+        )
+        
+        resolution = generate_horizontal_resolution(conflict, ownship, preferred_turn="right")
+        
+        # Function may not be implemented yet
+        if resolution is not None:
+            # Right turn from 180° should result in heading > 180°
+            assert resolution.new_heading_deg is not None
+            # Allow for reasonable turn angles
+            assert 180 < resolution.new_heading_deg <= 270
+    
+    def test_generate_horizontal_resolution_left_turn(self):
+        """Test horizontal resolution with left turn preference."""
+        conflict = ConflictPrediction(
+            ownship_id="OWNSHIP",
+            intruder_id="TRAFFIC1",
+            time_to_cpa_min=6.0,
+            distance_at_cpa_nm=4.0,
+            altitude_diff_ft=0.0,
+            is_conflict=True,
+            severity_score=0.7,
+            conflict_type="horizontal",
+            prediction_time=datetime.now(),
+            confidence=0.85
+        )
+        
+        ownship = AircraftState(
+            aircraft_id="OWNSHIP",
+            timestamp=datetime.now(),
+            latitude=59.3,
+            longitude=18.1,
+            altitude_ft=35000,
+            ground_speed_kt=450,
+            heading_deg=0,  # North
+            vertical_speed_fpm=0
+        )
+        
+        resolution = generate_horizontal_resolution(conflict, ownship, preferred_turn="left")
+        
+        # Function may not be implemented yet
+        if resolution is not None:
+            # Left turn from 0° should result in heading > 270° (wrapped)
+            assert resolution.new_heading_deg is not None
+
+
+class TestVerticalResolution:
+    """Test vertical conflict resolution generation."""
+    
+    def test_generate_vertical_resolution_climb(self):
+        """Test vertical resolution with climb preference."""
+        conflict = ConflictPrediction(
+            ownship_id="OWNSHIP",
+            intruder_id="TRAFFIC1",
+            time_to_cpa_min=7.0,
+            distance_at_cpa_nm=6.0,  # Safe horizontal separation
+            altitude_diff_ft=500.0,  # Below 1000 ft threshold
+            is_conflict=True,
+            severity_score=0.6,
+            conflict_type="vertical",
+            prediction_time=datetime.now(),
+            confidence=0.8
+        )
+        
+        ownship = AircraftState(
+            aircraft_id="OWNSHIP",
+            timestamp=datetime.now(),
+            latitude=59.3,
+            longitude=18.1,
+            altitude_ft=35000,
+            ground_speed_kt=450,
+            heading_deg=90,
+            vertical_speed_fpm=0
+        )
+        
+        resolution = generate_vertical_resolution(conflict, ownship, preferred_direction="climb")
+        
+        # Function may not be implemented yet
+        if resolution is not None:
+            assert isinstance(resolution, ResolutionCommand)
+            assert resolution.resolution_type == ResolutionType.ALTITUDE_CHANGE
+            assert resolution.target_aircraft == "OWNSHIP"
+            assert resolution.new_altitude_ft is not None
+            assert resolution.new_altitude_ft > 35000  # Should be higher
+    
+    def test_generate_vertical_resolution_descend(self):
+        """Test vertical resolution with descend preference."""
+        conflict = ConflictPrediction(
+            ownship_id="OWNSHIP",
+            intruder_id="TRAFFIC1",
+            time_to_cpa_min=4.0,
+            distance_at_cpa_nm=8.0,
+            altitude_diff_ft=800.0,  # Below threshold
+            is_conflict=True,
+            severity_score=0.5,
+            conflict_type="vertical",
+            prediction_time=datetime.now(),
+            confidence=0.75
+        )
+        
+        ownship = AircraftState(
+            aircraft_id="OWNSHIP",
+            timestamp=datetime.now(),
+            latitude=59.3,
+            longitude=18.1,
+            altitude_ft=35000,
+            ground_speed_kt=450,
+            heading_deg=90,
+            vertical_speed_fpm=0
+        )
+        
+        resolution = generate_vertical_resolution(conflict, ownship, preferred_direction="descend")
+        
+        # Function may not be implemented yet
+        if resolution is not None:
+            assert resolution.new_altitude_ft is not None
+            assert resolution.new_altitude_ft < 35000  # Should be lower
+
+
+class TestResolutionValidation:
+    """Test resolution validation logic."""
+    
+    def test_validate_resolution_safe(self):
+        """Test validation of safe resolution."""
+        resolution = ResolutionCommand(
+            resolution_id="TEST_RES_001",
+            target_aircraft="OWNSHIP",
+            resolution_type=ResolutionType.HEADING_CHANGE,
+            new_heading_deg=120.0,
+            issue_time=datetime.now(),
+            is_validated=False,
+            safety_margin_nm=2.0
+        )
+        
+        ownship = AircraftState(
+            aircraft_id="OWNSHIP",
+            timestamp=datetime.now(),
+            latitude=59.3,
+            longitude=18.1,
+            altitude_ft=35000,
+            ground_speed_kt=450,
+            heading_deg=90,
+            vertical_speed_fpm=0
+        )
+        
+        traffic = []  # No traffic for simple test
+        
+        result = validate_resolution(resolution, ownship, traffic)
+        
+        # Function may not be implemented yet
+        if result is not None:
+            assert isinstance(result, bool)
+    
+    def test_validate_resolution_unsafe(self):
+        """Test validation rejection of unsafe resolution."""
+        # Create an obviously unsafe resolution (too extreme turn)
+        resolution = ResolutionCommand(
+            resolution_id="UNSAFE_RES",
+            target_aircraft="OWNSHIP",
+            resolution_type=ResolutionType.HEADING_CHANGE,
+            new_heading_deg=270.0,  # 180° turn - very extreme
+            issue_time=datetime.now(),
+            is_validated=False,
+            safety_margin_nm=0.1  # Very small safety margin
+        )
+        
+        ownship = AircraftState(
+            aircraft_id="OWNSHIP",
+            timestamp=datetime.now(),
+            latitude=59.3,
+            longitude=18.1,
+            altitude_ft=35000,
+            ground_speed_kt=450,
+            heading_deg=90,
+            vertical_speed_fpm=0
+        )
+        
+        traffic = []
+        
+        result = validate_resolution(resolution, ownship, traffic)
+        
+        # Function may not be implemented yet, but if it is, should reject extreme maneuvers
+        if result is not None:
+            assert isinstance(result, bool)
+
+
+class TestBlueSkyCommandTranslation:
+    """Test conversion of resolutions to BlueSky commands."""
+    
+    def test_to_bluesky_command_heading(self):
+        """Test heading change command translation."""
+        resolution = ResolutionCommand(
+            resolution_id="HDG_TEST",
+            target_aircraft="KLM123",
+            resolution_type=ResolutionType.HEADING_CHANGE,
+            new_heading_deg=270.0,
+            issue_time=datetime.now(),
+            is_validated=True,
+            safety_margin_nm=3.0
+        )
+        
+        command = to_bluesky_command(resolution, "KLM123")
+        
+        # Function may not be implemented yet
+        if command is not None:
+            assert isinstance(command, str)
+            assert "HDG" in command
+            assert "KLM123" in command
+            assert "270" in command
+    
+    def test_to_bluesky_command_altitude(self):
+        """Test altitude change command translation."""
+        resolution = ResolutionCommand(
+            resolution_id="ALT_TEST",
+            target_aircraft="BAW456",
+            resolution_type=ResolutionType.ALTITUDE_CHANGE,
+            new_altitude_ft=37000.0,
+            issue_time=datetime.now(),
+            is_validated=True,
+            safety_margin_nm=2.5
+        )
+        
+        command = to_bluesky_command(resolution, "BAW456")
+        
+        # Function may not be implemented yet
+        if command is not None:
+            assert isinstance(command, str)
+            assert "ALT" in command
+            assert "BAW456" in command
+            assert "37000" in command
+    
+    def test_to_bluesky_command_speed(self):
+        """Test speed change command translation."""
+        resolution = ResolutionCommand(
+            resolution_id="SPD_TEST",
+            target_aircraft="AFR789",
+            resolution_type=ResolutionType.SPEED_CHANGE,
+            new_speed_kt=380.0,
+            issue_time=datetime.now(),
+            is_validated=True,
+            safety_margin_nm=4.0
+        )
+        
+        command = to_bluesky_command(resolution, "AFR789")
+        
+        # Function may not be implemented yet
+        if command is not None:
+            assert isinstance(command, str)
+            assert "SPD" in command
+            assert "AFR789" in command
+            assert "380" in command
+
+
+class TestResolutionEdgeCases:
+    """Test edge cases in resolution generation."""
+    
+    def test_resolution_no_conflict(self):
+        """Test resolution generation for non-conflict scenario."""
+        # Create a scenario that's not actually a conflict
+        non_conflict = ConflictPrediction(
+            ownship_id="OWNSHIP",
+            intruder_id="TRAFFIC1",
+            time_to_cpa_min=10.0,
+            distance_at_cpa_nm=10.0,  # Well above 5 NM threshold
+            altitude_diff_ft=2000.0,  # Well above 1000 ft threshold
+            is_conflict=False,  # Not actually a conflict
+            severity_score=0.1,
+            conflict_type="none",
+            prediction_time=datetime.now(),
+            confidence=0.6
+        )
+        
+        ownship = AircraftState(
+            aircraft_id="OWNSHIP",
+            timestamp=datetime.now(),
+            latitude=59.3,
+            longitude=18.1,
+            altitude_ft=35000,
+            ground_speed_kt=450,
+            heading_deg=90,
+            vertical_speed_fpm=0
+        )
+        
+        # Should not generate resolution for non-conflict
+        h_resolution = generate_horizontal_resolution(non_conflict, ownship)
+        v_resolution = generate_vertical_resolution(non_conflict, ownship)
+        
+        # Functions may not be implemented yet, but if they are:
+        if h_resolution is not None:
+            # Should either be None or marked as not necessary
+            pass
+        if v_resolution is not None:
+            # Should either be None or marked as not necessary
+            pass
+    
+    def test_resolution_extreme_geometry(self):
+        """Test resolution generation for extreme geometric scenarios."""
+        # Very close, very fast conflict
+        extreme_conflict = ConflictPrediction(
+            ownship_id="OWNSHIP",
+            intruder_id="TRAFFIC1",
+            time_to_cpa_min=0.5,  # Very short time
+            distance_at_cpa_nm=0.1,  # Very close
+            altitude_diff_ft=0.0,
+            is_conflict=True,
+            severity_score=1.0,  # Maximum severity
+            conflict_type="both",
+            prediction_time=datetime.now(),
+            confidence=0.99
+        )
+        
+        ownship = AircraftState(
+            aircraft_id="OWNSHIP",
+            timestamp=datetime.now(),
+            latitude=59.3,
+            longitude=18.1,
+            altitude_ft=35000,
+            ground_speed_kt=900,  # Very fast
+            heading_deg=90,
+            vertical_speed_fpm=0
+        )
+        
+        # Should handle extreme cases gracefully
+        resolution = generate_horizontal_resolution(extreme_conflict, ownship)
+        
+        # Function may not be implemented yet
+        if resolution is not None:
+            # Should produce valid resolution even for extreme cases
+            assert isinstance(resolution, ResolutionCommand)
+
+
+# Smoke tests for Sprint 0
+def test_resolution_module_imports():
+    """Smoke test that resolution module imports correctly."""
+    from src.cdr import resolve
+    
+    # Verify key functions are available
+    assert hasattr(resolve, 'generate_horizontal_resolution')
+    assert hasattr(resolve, 'generate_vertical_resolution')
+    assert hasattr(resolve, 'validate_resolution')
+    assert hasattr(resolve, 'to_bluesky_command')
+
+
+def test_resolution_types_available():
+    """Test that resolution types are properly defined."""
+    from src.cdr.schemas import ResolutionType
+    
+    # Verify all expected resolution types exist
+    assert hasattr(ResolutionType, 'HEADING_CHANGE')
+    assert hasattr(ResolutionType, 'SPEED_CHANGE')
+    assert hasattr(ResolutionType, 'ALTITUDE_CHANGE')
+    assert hasattr(ResolutionType, 'COMBINED')

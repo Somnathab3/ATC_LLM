@@ -18,13 +18,15 @@ Usage:
 import argparse
 import logging
 import sys
+import contextlib
+import inspect
 from pathlib import Path
-from typing import Optional, Any
+from typing import Dict, Any, List
 
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent / "src"))
-
-from src.cdr.schemas import ConfigurationSettings, MonteCarloParameters
+# Add src and bin to path for imports
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root / "src"))
+sys.path.insert(0, str(project_root / "bin"))
 
 
 def setup_logging(verbose: bool = False):
@@ -37,17 +39,77 @@ def setup_logging(verbose: bool = False):
     )
 
 
+@contextlib.contextmanager
+def argv_context(new_argv: List[str]):
+    """Context manager for safely modifying sys.argv."""
+    original_argv = sys.argv.copy()
+    try:
+        sys.argv = new_argv
+        yield
+    finally:
+        sys.argv = original_argv
+
+
+def validate_path_exists(path: str, path_type: str = "path") -> bool:
+    """Validate that a path exists."""
+    if not Path(path).exists():
+        print(f"[ERROR] {path_type.capitalize()} does not exist: {path}")
+        return False
+    return True
+
+
+def safe_import(module_name: str, description: str = "module"):
+    """Safely import a module with error handling."""
+    try:
+        if module_name == "repo_healthcheck":
+            from repo_healthcheck import main
+            return main
+        elif module_name == "complete_llm_demo":
+            from complete_llm_demo import main
+            return main
+        elif module_name == "batch_scat_llm_processor":
+            from batch_scat_llm_processor import main
+            return main
+        elif module_name == "production_batch_processor":
+            from production_batch_processor import main
+            return main
+        elif module_name == "demo_baseline_vs_llm":
+            from demo_baseline_vs_llm import main
+            return main
+        elif module_name == "verify_llm_communication":
+            from verify_llm_communication import main
+            return main
+        elif module_name == "visualize_conflicts":
+            from visualize_conflicts import main
+            return main
+        else:
+            raise ImportError(f"Unknown module: {module_name}")
+    except ImportError as e:
+        print(f"[ERROR] Failed to import {description}: {e}")
+        print(f"   Make sure the required module is available in the bin directory")
+        return None
+    except Exception as e:
+        print(f"[ERROR] Unexpected error importing {description}: {e}")
+        return None
+
+
 def cmd_health_check(args: argparse.Namespace) -> int:
     """Run system health check to verify all components are working."""
     setup_logging(args.verbose)
     
+    health_main = safe_import("repo_healthcheck", "health check module")
+    if not health_main:
+        return 1
+    
     try:
-        from scripts.repo_healthcheck import main as health_main
         health_main()
-        print("✅ System health check completed successfully!")
+        print("[OK] System health check completed successfully!")
         return 0
     except Exception as e:
-        print(f"❌ Health check failed: {e}")
+        print(f"[ERROR] Health check failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
         return 1
 
 
@@ -55,20 +117,24 @@ def cmd_simulate_basic(args: argparse.Namespace) -> int:
     """Run basic simulation with generated scenarios."""
     setup_logging(args.verbose)
     
+    demo_main = safe_import("complete_llm_demo", "demo module")
+    if not demo_main:
+        return 1
+    
     try:
-        from complete_llm_demo import main as demo_main
-        
-        # Configure for basic simulation
-        print(f"🚀 Starting basic simulation...")
+        print(f"[INIT] Starting basic simulation...")
         print(f"   Aircraft: {args.aircraft}")
         print(f"   Duration: {args.duration} minutes")
         print(f"   LLM Model: {args.llm_model}")
         
         demo_main()
-        print("✅ Basic simulation completed successfully!")
+        print("[OK] Basic simulation completed successfully!")
         return 0
     except Exception as e:
-        print(f"❌ Basic simulation failed: {e}")
+        print(f"[ERROR] Basic simulation failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
         return 1
 
 
@@ -76,18 +142,23 @@ def cmd_simulate_scat(args: argparse.Namespace) -> int:
     """Run simulation with SCAT real-world data."""
     setup_logging(args.verbose)
     
+    # Validate SCAT directory exists
+    if not validate_path_exists(args.scat_dir, "SCAT directory"):
+        return 1
+    
+    batch_main = safe_import("batch_scat_llm_processor", "SCAT batch processor")
+    if not batch_main:
+        return 1
+    
     try:
-        from batch_scat_llm_processor import main as batch_main
-        
-        print(f"🚀 Starting SCAT simulation...")
+        print(f"[INIT] Starting SCAT simulation...")
         print(f"   SCAT Directory: {args.scat_dir}")
         print(f"   Max Flights: {args.max_flights}")
         print(f"   Scenarios per Flight: {args.scenarios_per_flight}")
         print(f"   Output Directory: {args.output_dir}")
         
-        # Override sys.argv for the batch processor
-        original_argv = sys.argv.copy()
-        sys.argv = [
+        # Use context manager for argv manipulation
+        new_argv = [
             'batch_scat_llm_processor.py',
             '--scat-dir', args.scat_dir,
             '--max-flights', str(args.max_flights),
@@ -96,18 +167,21 @@ def cmd_simulate_scat(args: argparse.Namespace) -> int:
             '--llm-model', args.llm_model
         ]
         if args.verbose:
-            sys.argv.append('--verbose')
-            
-        result = batch_main()
-        sys.argv = original_argv
+            new_argv.append('--verbose')
+        
+        with argv_context(new_argv):
+            result = batch_main()
         
         if result == 0:
-            print("✅ SCAT simulation completed successfully!")
+            print("[OK] SCAT simulation completed successfully!")
         else:
-            print("❌ SCAT simulation failed!")
-        return result
+            print("[ERROR] SCAT simulation failed!")
+        return result or 0
     except Exception as e:
-        print(f"❌ SCAT simulation failed: {e}")
+        print(f"[ERROR] SCAT simulation failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
         return 1
 
 
@@ -115,17 +189,22 @@ def cmd_batch_production(args: argparse.Namespace) -> int:
     """Run production batch processing with all safety checks."""
     setup_logging(args.verbose)
     
+    # Validate SCAT directory exists
+    if not validate_path_exists(args.scat_dir, "SCAT directory"):
+        return 1
+    
+    prod_main = safe_import("production_batch_processor", "production batch processor")
+    if not prod_main:
+        return 1
+    
     try:
-        from production_batch_processor import main as prod_main
-        
-        print(f"🏭 Starting production batch processing...")
+        print(f"[FACTORY] Starting production batch processing...")
         print(f"   SCAT Directory: {args.scat_dir}")
         print(f"   Max Flights: {args.max_flights}")
         print(f"   Scenarios per Flight: {args.scenarios_per_flight}")
         
-        # Override sys.argv for the production processor
-        original_argv = sys.argv.copy()
-        sys.argv = [
+        # Use context manager for argv manipulation
+        new_argv = [
             'production_batch_processor.py',
             '--scat-dir', args.scat_dir,
             '--max-flights', str(args.max_flights),
@@ -133,20 +212,23 @@ def cmd_batch_production(args: argparse.Namespace) -> int:
             '--output-dir', args.output_dir
         ]
         if args.skip_checks:
-            sys.argv.append('--skip-checks')
+            new_argv.append('--skip-checks')
         if args.verbose:
-            sys.argv.append('--verbose')
+            new_argv.append('--verbose')
             
-        result = prod_main()
-        sys.argv = original_argv
+        with argv_context(new_argv):
+            result = prod_main()
         
         if result == 0:
-            print("✅ Production batch processing completed successfully!")
+            print("[OK] Production batch processing completed successfully!")
         else:
-            print("❌ Production batch processing failed!")
-        return result
+            print("[ERROR] Production batch processing failed!")
+        return result or 0
     except Exception as e:
-        print(f"❌ Production batch processing failed: {e}")
+        print(f"[ERROR] Production batch processing failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
         return 1
 
 
@@ -154,17 +236,22 @@ def cmd_compare_baseline_llm(args: argparse.Namespace) -> int:
     """Compare baseline vs LLM performance."""
     setup_logging(args.verbose)
     
+    # Validate SCAT path exists
+    if not validate_path_exists(args.scat_path, "SCAT path"):
+        return 1
+    
+    compare_main = safe_import("demo_baseline_vs_llm", "comparison module")
+    if not compare_main:
+        return 1
+    
     try:
-        from demo_baseline_vs_llm import main as compare_main
-        
-        print(f"📊 Starting baseline vs LLM comparison...")
+        print(f"[STATS] Starting baseline vs LLM comparison...")
         print(f"   SCAT Path: {args.scat_path}")
         print(f"   Max Flights: {args.max_flights}")
         print(f"   Time Window: {args.time_window} minutes")
         
-        # Override sys.argv for the comparison
-        original_argv = sys.argv.copy()
-        sys.argv = [
+        # Use context manager for argv manipulation
+        new_argv = [
             'demo_baseline_vs_llm.py',
             '--scat-path', args.scat_path,
             '--max-flights', str(args.max_flights),
@@ -172,13 +259,16 @@ def cmd_compare_baseline_llm(args: argparse.Namespace) -> int:
             '--output', args.output
         ]
         
-        compare_main()
-        sys.argv = original_argv
+        with argv_context(new_argv):
+            compare_main()
         
-        print("✅ Baseline vs LLM comparison completed successfully!")
+        print("[OK] Baseline vs LLM comparison completed successfully!")
         return 0
     except Exception as e:
-        print(f"❌ Comparison failed: {e}")
+        print(f"[ERROR] Comparison failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
         return 1
 
 
@@ -189,7 +279,7 @@ def cmd_test_suite(args: argparse.Namespace) -> int:
     try:
         import subprocess
         
-        print(f"🧪 Running test suite...")
+        print(f"[EXPERIMENT] Running test suite...")
         
         if args.coverage:
             cmd = ['python', '-m', 'pytest', '--cov=src', '--cov-report=html', '--cov-report=term']
@@ -201,19 +291,39 @@ def cmd_test_suite(args: argparse.Namespace) -> int:
             
         if args.test_pattern:
             cmd.extend(['-k', args.test_pattern])
-            
-        result = subprocess.run(cmd, cwd=Path(__file__).parent)
         
+        # Use Path.cwd() if parent directory doesn't exist
+        cwd_path = Path(__file__).parent
+        if not cwd_path.exists():
+            cwd_path = Path.cwd()
+            
+        result = subprocess.run(cmd, cwd=cwd_path)
+        
+        # Handle different exit codes properly
         if result.returncode == 0:
-            print("✅ Test suite completed successfully!")
+            print("[OK] Test suite completed successfully!")
             if args.coverage:
-                print("📊 Coverage report generated in htmlcov/")
+                print("[STATS] Coverage report generated in htmlcov/")
+        elif result.returncode == 5:
+            # pytest exit code 5 means no tests were collected/run
+            print("[WARN]  No tests found matching the criteria")
+            if args.test_pattern:
+                print(f"   Pattern used: {args.test_pattern}")
+            return 0  # This is not an error condition
         else:
-            print("❌ Some tests failed!")
+            print("[ERROR] Some tests failed!")
             
         return result.returncode
+    except FileNotFoundError:
+        print("[ERROR] pytest not found. Please install pytest with: pip install pytest")
+        if args.coverage:
+            print("   Also install pytest-cov with: pip install pytest-cov")
+        return 1
     except Exception as e:
-        print(f"❌ Test execution failed: {e}")
+        print(f"[ERROR] Test execution failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
         return 1
 
 
@@ -223,12 +333,23 @@ def cmd_start_server(args: argparse.Namespace) -> int:
     
     try:
         import uvicorn
-        from src.api.service import app
         
-        print(f"🌐 Starting API server...")
+        print(f"[GLOBAL] Starting API server...")
         print(f"   Host: {args.host}")
         print(f"   Port: {args.port}")
         print(f"   Debug: {args.debug}")
+        
+        # Check if the API service module exists
+        try:
+            from src.api.service import app  # noqa: F401
+            print("[OK] API service module loaded successfully")
+        except ImportError as e:
+            print(f"[ERROR] API service module not found: {e}")
+            print("   Make sure src/api/service.py exists and is properly configured")
+            return 1
+        except Exception as e:
+            print(f"[ERROR] Error loading API service: {e}")
+            return 1
         
         uvicorn.run(
             "src.api.service:app",
@@ -239,8 +360,14 @@ def cmd_start_server(args: argparse.Namespace) -> int:
         )
         
         return 0
+    except ImportError:
+        print("[ERROR] uvicorn not found. Please install uvicorn with: pip install uvicorn")
+        return 1
     except Exception as e:
-        print(f"❌ Failed to start server: {e}")
+        print(f"[ERROR] Failed to start server: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
         return 1
 
 
@@ -248,17 +375,26 @@ def cmd_verify_llm(args: argparse.Namespace) -> int:
     """Verify LLM connectivity and functionality."""
     setup_logging(args.verbose)
     
+    verify_main = safe_import("verify_llm_communication", "LLM verification module")
+    if not verify_main:
+        return 1
+    
     try:
-        from verify_llm_communication import main as verify_main
-        
-        print(f"🤖 Verifying LLM connectivity...")
+        print(f"[BOT] Verifying LLM connectivity...")
         print(f"   Model: {args.model}")
         
-        verify_main()
-        print("✅ LLM verification completed successfully!")
+        # Use context manager for argv manipulation
+        with argv_context(['verify_llm_communication.py']):
+            verify_main()
+        
+        print("[OK] LLM verification completed successfully!")
         return 0
+            
     except Exception as e:
-        print(f"❌ LLM verification failed: {e}")
+        print(f"[ERROR] LLM verification failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
         return 1
 
 
@@ -266,19 +402,30 @@ def cmd_visualize_conflicts(args: argparse.Namespace) -> int:
     """Generate conflict visualization plots."""
     setup_logging(args.verbose)
     
+    # Validate data file exists
+    if not validate_path_exists(args.data_file, "data file"):
+        return 1
+    
+    viz_main = safe_import("visualize_conflicts", "visualization module")
+    if not viz_main:
+        return 1
+    
     try:
-        from visualize_conflicts import main as viz_main
-        
-        print(f"📈 Generating conflict visualizations...")
+        print(f"[CHART] Generating conflict visualizations...")
         print(f"   Data file: {args.data_file}")
-        print(f"   Output directory: {args.output_dir}")
         
-        # Call visualization main function
-        viz_main()
-        print("✅ Conflict visualizations generated successfully!")
+        # Call visualization main function with proper arguments
+        # The updated visualize_conflicts script only needs --data-file
+        with argv_context(['visualize_conflicts.py', '--data-file', args.data_file]):
+            viz_main()
+            
+        print("[OK] Conflict visualizations generated successfully!")
         return 0
     except Exception as e:
-        print(f"❌ Visualization generation failed: {e}")
+        print(f"[ERROR] Visualization generation failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
         return 1
 
 
@@ -343,8 +490,18 @@ Examples:
     
     # Production batch
     prod_parser = batch_subparsers.add_parser('production', help='Production batch processing')
-    prod_parser.add_argument('--scat-dir', default='F:\\SCAT_extracted',
-                            help='SCAT directory (default: F:\\SCAT_extracted)')
+    
+    # Try to use a reasonable default SCAT directory
+    default_scat_dir = 'scenarios/scat'  # Use relative path by default
+    if Path(project_root / 'scenarios' / 'scat').exists():
+        default_scat_dir = str(project_root / 'scenarios' / 'scat')
+    elif Path('F:/SCAT_extracted').exists():
+        default_scat_dir = 'F:/SCAT_extracted'
+    elif Path('/data/SCAT_extracted').exists():
+        default_scat_dir = '/data/SCAT_extracted'
+        
+    prod_parser.add_argument('--scat-dir', default=default_scat_dir,
+                            help=f'SCAT directory (default: {default_scat_dir})')
     prod_parser.add_argument('--max-flights', type=int, default=5,
                             help='Maximum flights to process (default: 5)')
     prod_parser.add_argument('--scenarios-per-flight', type=int, default=5,
@@ -357,8 +514,18 @@ Examples:
     
     # Comparison commands
     comp_parser = subparsers.add_parser('compare', help='Compare system performance')
-    comp_parser.add_argument('--scat-path', default='F:/SCAT_extracted',
-                           help='Path to SCAT dataset (default: F:/SCAT_extracted)')
+    
+    # Try to use a reasonable default SCAT path
+    default_scat_path = 'scenarios/scat'  # Use relative path by default
+    if Path(project_root / 'scenarios' / 'scat').exists():
+        default_scat_path = str(project_root / 'scenarios' / 'scat')
+    elif Path('F:/SCAT_extracted').exists():
+        default_scat_path = 'F:/SCAT_extracted'
+    elif Path('/data/SCAT_extracted').exists():
+        default_scat_path = '/data/SCAT_extracted'
+        
+    comp_parser.add_argument('--scat-path', default=default_scat_path,
+                           help=f'Path to SCAT dataset (default: {default_scat_path})')
     comp_parser.add_argument('--max-flights', type=int, default=5,
                            help='Maximum flights to process (default: 5)')
     comp_parser.add_argument('--time-window', type=int, default=30,
@@ -395,8 +562,6 @@ Examples:
     viz_parser = subparsers.add_parser('visualize', help='Generate conflict visualizations')
     viz_parser.add_argument('--data-file', required=True,
                            help='Data file to visualize')
-    viz_parser.add_argument('--output-dir', default='visualizations',
-                           help='Output directory (default: visualizations)')
     viz_parser.set_defaults(func=cmd_visualize_conflicts)
     
     return parser
@@ -422,10 +587,10 @@ def main() -> int:
     try:
         return args.func(args)
     except KeyboardInterrupt:
-        print("\n⚠️  Operation cancelled by user")
+        print("\n[WARN]  Operation cancelled by user")
         return 130
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"[ERROR] Unexpected error: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()

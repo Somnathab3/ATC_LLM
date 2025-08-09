@@ -25,8 +25,8 @@ def predict_conflicts(
 ) -> List[ConflictPrediction]:
     """Predict conflicts within lookahead time window.
     
-    For each intruder within 100 NM / ±5000 ft, compute CPA; flag conflict if 
-    dmin < 5 NM and |Δalt| < 1000 ft within tmin ≤ 10 min.
+    For each intruder within 100 NM / +/-5000 ft, compute CPA; flag conflict if 
+    dmin < 5 NM and |deltaalt| < 1000 ft within tmin <= 10 min.
     
     Args:
         ownship: Current ownship state
@@ -63,7 +63,7 @@ def predict_conflicts(
         if horizontal_distance > 100.0:
             continue
             
-        # Pre-filter: check if within ±5000 ft vertically
+        # Pre-filter: check if within +/-5000 ft vertically
         altitude_diff = abs(ownship.altitude_ft - intruder.altitude_ft)
         if altitude_diff > 5000.0:
             continue

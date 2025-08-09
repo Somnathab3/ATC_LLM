@@ -1,0 +1,339 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Unicode to ASCII Cleaner
+
+This script finds and replaces Unicode characters (specifically emojis) in Python files
+with ASCII alternatives while preserving code structure, indentation, and formatting.
+"""
+
+import os
+import re
+import sys
+from pathlib import Path
+from typing import Dict, List, Tuple
+
+
+class UnicodePatternCleaner:
+    """Safely replace Unicode characters with ASCII alternatives in Python files."""
+    
+    def __init__(self):
+        # Define Unicode to ASCII mappings
+        self.unicode_mappings = {
+            # Emoji to ASCII replacements
+            '🚀': '[INIT]',
+            '✅': '[OK]',
+            '🔗': '[CONNECT]',
+            '⚠️': '[WARN]',
+            '❌': '[ERROR]',
+            '🧠': '[TEST]',
+            '📊': '[STATS]',
+            '📂': '[LOAD]',
+            '🎯': '[TARGET]',
+            '📝': '[PROMPT]',
+            '🔍': '[DETECT]',
+            '🔄': '[CONVERT]',
+            'ℹ️': '[INFO]',
+            '🔧': '[PROCESS]',
+            '🧹': '[CLEAN]',
+            '🏁': '[FINISH]',
+            '📋': '[CHECK]',
+            '🎉': '[SUCCESS]',
+            '💾': '[SAVE]',
+            '💡': '[TIP]',
+            '⚡': '[QUICK]',
+            '⏱️': '[TIME]',
+            '📁': '[FOLDER]',
+            '📤': '[SEND]',
+            '🤖': '[BOT]',
+            '📡': '[SIGNAL]',
+            '🛠️': '[TOOL]',
+            '🚨': '[ALERT]',
+            '📍': '[LOCATION]',
+            '✈️': '[AIRCRAFT]',
+            '📄': '[DOCUMENT]',
+            '📈': '[CHART]',
+            '📥': '[INBOX]',
+            '📐': '[RULER]',
+            '🗑️': '[TRASH]',
+            '❓': '[QUESTION]',
+            '📏': '[MEASURE]',
+            '🏭': '[FACTORY]',
+            '🧪': '[EXPERIMENT]',
+            '🌐': '[GLOBAL]',
+            
+            # Mathematical symbols
+            '°': 'deg',        # Degree symbol
+            'π': 'pi',         # Pi
+            'φ': 'phi',        # Phi (latitude)
+            'λ': 'lambda',     # Lambda (longitude)
+            'Δ': 'delta',      # Delta (change/difference)
+            '±': '+/-',        # Plus-minus
+            '≈': '~=',         # Approximately equal
+            '≤': '<=',         # Less than or equal
+            '≥': '>=',         # Greater than or equal
+            '∑': 'sum',        # Summation
+            '×': 'x',          # Multiplication
+            'θ': 'theta',      # Theta
+            'δ': 'delta_small', # Delta lowercase
+            
+            # Check marks and symbols
+            '✓': '[OK]',       # Check mark
+            '✗': '[FAIL]',     # X mark
+            '•': '*',          # Bullet point
+            '→': '->',         # Right arrow
+            
+            # Additional Unicode characters that might appear
+            '—': '--',         # Em dash
+            '–': '-',          # En dash
+            '"': '"',          # Left double quotation mark
+            '"': '"',          # Right double quotation mark
+            ''': "'",          # Left single quotation mark
+            ''': "'",          # Right single quotation mark
+            '…': '...',        # Horizontal ellipsis
+            '©': '(c)',        # Copyright symbol
+            '®': '(r)',        # Registered trademark symbol
+            '™': '(tm)',       # Trademark symbol
+            
+            # Special characters from specific files
+            'ö': 'o',          # O with diaeresis
+        }
+        
+        # Regex pattern to find any non-ASCII characters
+        self.non_ascii_pattern = re.compile(r'[^\x00-\x7F]')
+        
+    def find_unicode_chars(self, text: str) -> List[Tuple[int, str, str]]:
+        """Find all Unicode characters in text with their positions."""
+        unicode_chars = []
+        for match in self.non_ascii_pattern.finditer(text):
+            char = match.group()
+            pos = match.start()
+            line_num = text[:pos].count('\n') + 1
+            unicode_chars.append((line_num, char, repr(char)))
+        return unicode_chars
+    
+    def clean_unicode_in_text(self, text: str) -> Tuple[str, bool, List[str]]:
+        """
+        Replace Unicode characters with ASCII alternatives.
+        
+        Returns:
+            - Cleaned text
+            - Whether any changes were made
+            - List of changes made
+        """
+        original_text = text
+        changes = []
+        
+        # Apply known mappings first
+        for unicode_char, ascii_replacement in self.unicode_mappings.items():
+            if unicode_char in text:
+                count = text.count(unicode_char)
+                text = text.replace(unicode_char, ascii_replacement)
+                changes.append(f"Replaced {count} instances of '{unicode_char}' with '{ascii_replacement}'")
+        
+        # Check for any remaining non-ASCII characters
+        remaining_unicode = self.find_unicode_chars(text)
+        if remaining_unicode:
+            print(f"WARNING: Found {len(remaining_unicode)} unmapped Unicode characters:")
+            for line_num, char, repr_char in remaining_unicode[:10]:  # Show first 10
+                print(f"  Line {line_num}: {repr_char}")
+            if len(remaining_unicode) > 10:
+                print(f"  ... and {len(remaining_unicode) - 10} more")
+        
+        was_changed = original_text != text
+        return text, was_changed, changes
+    
+    def process_python_file(self, file_path: Path) -> Tuple[bool, List[str]]:
+        """
+        Process a single Python file to replace Unicode characters.
+        
+        Returns:
+            - Whether the file was modified
+            - List of changes made
+        """
+        try:
+            # Read file with UTF-8 encoding
+            with open(file_path, 'r', encoding='utf-8') as f:
+                original_content = f.read()
+            
+            # Clean Unicode characters
+            cleaned_content, was_changed, changes = self.clean_unicode_in_text(original_content)
+            
+            if was_changed:
+                # Create backup
+                backup_path = file_path.with_suffix(file_path.suffix + '.backup')
+                with open(backup_path, 'w', encoding='utf-8') as f:
+                    f.write(original_content)
+                
+                # Write cleaned content
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(cleaned_content)
+                
+                print(f"[OK] Cleaned: {file_path}")
+                for change in changes:
+                    print(f"  - {change}")
+                
+                return True, changes
+            else:
+                print(f"[OK] No changes needed: {file_path}")
+                return False, []
+                
+        except Exception as e:
+            print(f"[ERROR] Error processing {file_path}: {e}")
+            return False, []
+    
+    def find_all_python_files(self, root_path: Path) -> List[Path]:
+        """Find all Python files in the repository."""
+        python_files = []
+        
+        # Directories to exclude
+        exclude_dirs = {
+            '__pycache__', '.git', '.venv', 'venv', 'env', 
+            'node_modules', '.pytest_cache', 'htmlcov',
+            'Output', 'outputs', 'logs', 'reports'
+        }
+        
+        for py_file in root_path.rglob('*.py'):
+            # Check if file is in an excluded directory
+            if any(excluded in py_file.parts for excluded in exclude_dirs):
+                continue
+            python_files.append(py_file)
+        
+        return sorted(python_files)
+    
+    def scan_repository(self, repo_path: Path, dry_run: bool = False) -> Dict:
+        """
+        Scan entire repository for Unicode characters in Python files.
+        
+        Args:
+            repo_path: Path to repository root
+            dry_run: If True, only report findings without making changes
+        """
+        print(f"{'Scanning' if dry_run else 'Cleaning'} Python files in: {repo_path}")
+        print("=" * 60)
+        
+        python_files = self.find_all_python_files(repo_path)
+        
+        if not python_files:
+            print("No Python files found!")
+            return {'files_processed': 0, 'files_modified': 0, 'total_changes': 0}
+        
+        print(f"Found {len(python_files)} Python files to process")
+        print()
+        
+        files_modified = 0
+        total_changes = 0
+        files_with_unicode = []
+        
+        for file_path in python_files:
+            if dry_run:
+                # Just scan for Unicode characters
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    unicode_chars = self.find_unicode_chars(content)
+                    if unicode_chars:
+                        files_with_unicode.append((file_path, unicode_chars))
+                        print(f"📄 {file_path}")
+                        for line_num, char, repr_char in unicode_chars[:5]:  # Show first 5
+                            print(f"  Line {line_num}: {repr_char}")
+                        if len(unicode_chars) > 5:
+                            print(f"  ... and {len(unicode_chars) - 5} more")
+                        print()
+                        
+                except Exception as e:
+                    print(f"[ERROR] Error reading {file_path}: {e}")
+            else:
+                # Actually clean the files
+                was_modified, changes = self.process_python_file(file_path)
+                if was_modified:
+                    files_modified += 1
+                    total_changes += len(changes)
+        
+        print("=" * 60)
+        
+        if dry_run:
+            print(f"Scan Results:")
+            print(f"  Files scanned: {len(python_files)}")
+            print(f"  Files with Unicode: {len(files_with_unicode)}")
+            if files_with_unicode:
+                print(f"\nFiles that need cleaning:")
+                for file_path, unicode_chars in files_with_unicode:
+                    print(f"  - {file_path} ({len(unicode_chars)} Unicode chars)")
+        else:
+            print(f"Cleaning Results:")
+            print(f"  Files processed: {len(python_files)}")
+            print(f"  Files modified: {files_modified}")
+            print(f"  Total changes: {total_changes}")
+        
+        return {
+            'files_processed': len(python_files),
+            'files_modified': files_modified,
+            'total_changes': total_changes,
+            'files_with_unicode': files_with_unicode if dry_run else []
+        }
+
+
+def main():
+    """Main function to run the Unicode cleaner."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Clean Unicode characters from Python files')
+    parser.add_argument('path', nargs='?', default='.', 
+                       help='Path to repository or file (default: current directory)')
+    parser.add_argument('--dry-run', action='store_true',
+                       help='Only scan and report, do not make changes')
+    parser.add_argument('--file', 
+                       help='Process a single file instead of entire repository')
+    
+    args = parser.parse_args()
+    
+    cleaner = UnicodePatternCleaner()
+    
+    if args.file:
+        # Process single file
+        file_path = Path(args.file)
+        if not file_path.exists():
+            print(f"[ERROR] File not found: {file_path}")
+            return 1
+        
+        if not file_path.suffix == '.py':
+            print(f"[ERROR] Not a Python file: {file_path}")
+            return 1
+        
+        if args.dry_run:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            unicode_chars = cleaner.find_unicode_chars(content)
+            if unicode_chars:
+                print(f"Found {len(unicode_chars)} Unicode characters in {file_path}:")
+                for line_num, char, repr_char in unicode_chars:
+                    print(f"  Line {line_num}: {repr_char}")
+            else:
+                print(f"No Unicode characters found in {file_path}")
+        else:
+            was_modified, changes = cleaner.process_python_file(file_path)
+            if was_modified:
+                print(f"[OK] Successfully cleaned {file_path}")
+            else:
+                print(f"[OK] No changes needed for {file_path}")
+    
+    else:
+        # Process entire repository
+        repo_path = Path(args.path).resolve()
+        if not repo_path.exists():
+            print(f"[ERROR] Path not found: {repo_path}")
+            return 1
+        
+        results = cleaner.scan_repository(repo_path, dry_run=args.dry_run)
+        
+        if args.dry_run and results['files_with_unicode']:
+            print(f"\nTo clean these files, run:")
+            print(f"python {__file__} {repo_path}")
+    
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

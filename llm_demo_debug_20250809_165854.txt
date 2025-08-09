@@ -1,0 +1,10 @@
+LLM Communication Demonstration Debug Log
+==================================================
+
+[16:58:14] Loading SCAT file: scenarios/scat/100000.json
+[16:58:14] Successfully converted SCAT data for SAS101
+[16:58:14] Analyzing aircraft SAS101 with LLM
+[16:58:14] Sending prompt to LLM (length: 1293 chars)
+[16:58:54] LLM responded in 40.34s
+[16:58:54] No JSON found in response
+[16:58:54] LLM analysis failed: No JSON found

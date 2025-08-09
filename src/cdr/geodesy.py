@@ -48,7 +48,7 @@ def bearing_rad(a: Coordinate, b: Coordinate) -> float:
         b: Destination coordinate (lat, lon) in degrees
         
     Returns:
-        Bearing in radians (0 = North, π/2 = East)
+        Bearing in radians (0 = North, pi/2 = East)
         
     Example:
         >>> bearing_rad((0, 0), (0, 1))  # East
@@ -66,34 +66,34 @@ def normalize_heading_deg(hdg: float) -> float:
 
 def bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Initial great-circle bearing from (lat1,lon1) to (lat2,lon2) in degrees."""
-    φ1 = math.radians(lat1)
-    φ2 = math.radians(lat2)
-    Δλ = math.radians(lon2 - lon1)
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    deltalambda = math.radians(lon2 - lon1)
 
-    y = math.sin(Δλ) * math.cos(φ2)
-    x = math.cos(φ1) * math.sin(φ2) - math.sin(φ1) * math.cos(φ2) * math.cos(Δλ)
-    θ = math.degrees(math.atan2(y, x))
-    return normalize_heading_deg(θ)
+    y = math.sin(deltalambda) * math.cos(phi2)
+    x = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(deltalambda)
+    theta = math.degrees(math.atan2(y, x))
+    return normalize_heading_deg(theta)
 
 def destination_point_nm(lat: float, lon: float, bearing_deg_in: float, distance_nm: float):
     """
     Great-circle forward problem: from (lat,lon) go 'distance_nm' at 'bearing_deg_in'.
     Returns (lat2, lon2) in degrees.
     """
-    θ = math.radians(bearing_deg_in)
-    δ = distance_nm / R_NM  # angular distance
-    φ1 = math.radians(lat)
-    λ1 = math.radians(lon)
+    theta = math.radians(bearing_deg_in)
+    delta_small = distance_nm / R_NM  # angular distance
+    phi1 = math.radians(lat)
+    lambda1 = math.radians(lon)
 
-    sinφ2 = math.sin(φ1) * math.cos(δ) + math.cos(φ1) * math.sin(δ) * math.cos(θ)
-    φ2 = math.asin(sinφ2)
+    sinphi2 = math.sin(phi1) * math.cos(delta_small) + math.cos(phi1) * math.sin(delta_small) * math.cos(theta)
+    phi2 = math.asin(sinphi2)
 
-    y = math.sin(θ) * math.sin(δ) * math.cos(φ1)
-    x = math.cos(δ) - math.sin(φ1) * sinφ2
-    λ2 = λ1 + math.atan2(y, x)
+    y = math.sin(theta) * math.sin(delta_small) * math.cos(phi1)
+    x = math.cos(delta_small) - math.sin(phi1) * sinphi2
+    lambda2 = lambda1 + math.atan2(y, x)
 
-    return (math.degrees(φ2),
-            (math.degrees(λ2) + 540.0) % 360.0 - 180.0)  # normalize lon to [-180,180]
+    return (math.degrees(phi2),
+            (math.degrees(lambda2) + 540.0) % 360.0 - 180.0)  # normalize lon to [-180,180]
 
 def cpa_nm(own: Aircraft, intr: Aircraft) -> Tuple[float, float]:
     """Calculate Closest Point of Approach assuming constant velocity.
@@ -130,11 +130,11 @@ def cpa_nm(own: Aircraft, intr: Aircraft) -> Tuple[float, float]:
     xi, yi = to_xy(intr)
     
     # Velocity vectors (East, North components in nm/hour)
-    # Convert heading from aviation (0°=North, clockwise) to math (0°=East, counter-clockwise)
+    # Convert heading from aviation (0deg=North, clockwise) to math (0deg=East, counter-clockwise)
     def velocity_components(aircraft: Aircraft) -> Tuple[float, float]:
         hdg_rad = math.radians(aircraft["hdg_deg"])
         speed = aircraft["spd_kt"]
-        # Aviation heading: 0° = North, 90° = East
+        # Aviation heading: 0deg = North, 90deg = East
         vx = speed * math.sin(hdg_rad)  # East component
         vy = speed * math.cos(hdg_rad)  # North component
         return vx, vy

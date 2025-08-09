@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+"""
+Output Organization Utility
+
+This script reorganizes the Output folder to use the new Date_time_type structure
+and provides utility functions for generating properly structured output paths.
+"""
+
+import os
+import shutil
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, List, Optional
+import re
+
+def get_organized_output_path(test_type: str, timestamp: Optional[str] = None) -> Path:
+    """
+    Generate output path with Date_time_type structure.
+    
+    Args:
+        test_type: Type of test (batch, simulation, verification, visualization, etc.)
+        timestamp: Optional timestamp string (YYYYMMDD_HHMMSS format)
+    
+    Returns:
+        Path object for the organized output directory
+    """
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Extract date and time components
+    date_part = timestamp[:8]  # YYYYMMDD
+    time_part = timestamp[9:15] if len(timestamp) > 8 else timestamp[8:14]  # HHMMSS
+    
+    # Create folder name: Date_time_type
+    folder_name = f"{date_part}_{time_part}_{test_type}"
+    
+    # Create full path
+    output_dir = Path("Output") / folder_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    return output_dir
+
+def categorize_existing_files() -> Dict[str, List[str]]:
+    """
+    Categorize existing files in Output folder by type.
+    
+    Returns:
+        Dictionary mapping test types to lists of filenames
+    """
+    output_path = Path("Output")
+    if not output_path.exists():
+        return {}
+    
+    categories = {
+        "batch": [],
+        "simulation": [],
+        "llm": [],
+        "verification": [],
+        "plots": [],
+        "unknown": []
+    }
+    
+    for file in output_path.iterdir():
+        if file.is_file():
+            filename = file.name.lower()
+            
+            if "batch" in filename:
+                categories["batch"].append(file.name)
+            elif "simulation" in filename and "llm" not in filename:
+                categories["simulation"].append(file.name)
+            elif "llm" in filename:
+                categories["llm"].append(file.name)
+            elif "verification" in filename:
+                categories["verification"].append(file.name)
+            elif "plot" in filename or "visual" in filename:
+                categories["plots"].append(file.name)
+            else:
+                categories["unknown"].append(file.name)
+    
+    return categories
+
+def extract_timestamp_from_filename(filename: str) -> str:
+    """
+    Extract timestamp from existing filename patterns.
+    
+    Args:
+        filename: Original filename
+        
+    Returns:
+        Timestamp string in YYYYMMDD_HHMMSS format
+    """
+    # Pattern for YYYYMMDD_HHMMSS
+    match = re.search(r'(\d{8}_\d{6})', filename)
+    if match:
+        return match.group(1)
+    
+    # Pattern for YYYYMMDD_HHMM
+    match = re.search(r'(\d{8}_\d{4})', filename)
+    if match:
+        return match.group(1) + "00"  # Add seconds
+    
+    # Fallback - use current timestamp
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+def organize_existing_files():
+    """
+    Move existing files into the new organized structure.
+    """
+    print("[FOLDER] Organizing existing output files...")
+    
+    output_path = Path("Output")
+    if not output_path.exists():
+        print("[ERROR] Output directory does not exist")
+        return
+    
+    categories = categorize_existing_files()
+    moved_count = 0
+    
+    for test_type, filenames in categories.items():
+        if not filenames:
+            continue
+            
+        print(f"\n[LOAD] Processing {test_type} files ({len(filenames)} files):")
+        
+        for filename in filenames:
+            old_path = output_path / filename
+            
+            # Extract timestamp from filename
+            timestamp = extract_timestamp_from_filename(filename)
+            
+            # Create organized directory
+            organized_dir = get_organized_output_path(test_type, timestamp)
+            new_path = organized_dir / filename
+            
+            try:
+                # Move file to organized location
+                shutil.move(str(old_path), str(new_path))
+                print(f"  [OK] {filename} -> {organized_dir.relative_to(Path('Output'))}")
+                moved_count += 1
+                
+            except Exception as e:
+                print(f"  [ERROR] Failed to move {filename}: {e}")
+    
+    print(f"\n[SUCCESS] Successfully organized {moved_count} files!")
+
+def cleanup_empty_directories():
+    """Remove any empty directories in Output folder."""
+    output_path = Path("Output")
+    
+    for item in output_path.iterdir():
+        if item.is_dir():
+            try:
+                # Try to remove if empty
+                item.rmdir()
+                print(f"[TRASH]  Removed empty directory: {item.name}")
+            except OSError:
+                # Directory not empty, which is fine
+                pass
+
+def main():
+    """Main function to reorganize output structure."""
+    print("[CONVERT] ATC LLM Output Structure Reorganization")
+    print("=" * 50)
+    
+    # Change to project root directory
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+    os.chdir(project_root)
+    
+    print(f"[LOCATION] Working in: {project_root}")
+    
+    # Show current structure
+    print("\n[CHECK] Current Output folder contents:")
+    output_path = Path("Output")
+    if output_path.exists():
+        files = list(output_path.glob("*"))
+        if files:
+            for file in files[:10]:  # Show first 10 files
+                print(f"  * {file.name}")
+            if len(files) > 10:
+                print(f"  ... and {len(files) - 10} more files")
+        else:
+            print("  (Empty)")
+    else:
+        print("  (Does not exist)")
+    
+    # Categorize files
+    categories = categorize_existing_files()
+    print(f"\n[STATS] File categorization:")
+    for category, files in categories.items():
+        if files:
+            print(f"  * {category}: {len(files)} files")
+    
+    # Ask for confirmation
+    response = input(f"\n[QUESTION] Proceed with reorganization? (y/N): ").strip().lower()
+    if response != 'y':
+        print("[ERROR] Reorganization cancelled")
+        return
+    
+    # Perform reorganization
+    organize_existing_files()
+    cleanup_empty_directories()
+    
+    print(f"\n[OK] Output reorganization complete!")
+    print(f"\n[FOLDER] New structure preview:")
+    
+    # Show new structure
+    for item in output_path.iterdir():
+        if item.is_dir():
+            file_count = len(list(item.glob("*")))
+            print(f"  [LOAD] {item.name}/ ({file_count} files)")
+
+if __name__ == "__main__":
+    main()

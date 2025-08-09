@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+"""
+Conflict Visualization Module
+
+This module generates visualizations for air traffic conflict scenarios,
+including trajectory plots, conflict timelines, and resolution effectiveness charts.
+"""
+
+import json
+import argparse
+import matplotlib.pyplot as plt
+import pandas as pd
+from pathlib import Path
+from typing import Dict, List, Any
+import numpy as np
+from datetime import datetime
+import sys
+
+# Add the parent directory to Python path
+script_dir = Path(__file__).parent
+project_root = script_dir.parent
+sys.path.insert(0, str(project_root))
+
+from src.utils.output_utils import get_output_path, TestTypes
+
+
+def load_conflict_data(data_file: Path) -> Dict[str, Any]:
+    """Load conflict data from JSON file."""
+    try:
+        with open(data_file, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading data file {data_file}: {e}")
+        return {}
+
+
+def plot_aircraft_trajectories(conflicts: List[Dict], output_dir: Path):
+    """Plot aircraft trajectories for conflicts."""
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown']
+    
+    for i, conflict in enumerate(conflicts[:6]):  # Limit to 6 conflicts for clarity
+        if 'aircraft_states' in conflict:
+            states = conflict['aircraft_states']
+            
+            # Plot trajectories for each aircraft
+            for j, aircraft_id in enumerate(states.keys()):
+                aircraft_data = states[aircraft_id]
+                if 'positions' in aircraft_data:
+                    positions = aircraft_data['positions']
+                    x_coords = [pos['lon'] for pos in positions]
+                    y_coords = [pos['lat'] for pos in positions]
+                    
+                    color = colors[i % len(colors)]
+                    ax.plot(x_coords, y_coords, color=color, 
+                           label=f"Conflict {i+1} - {aircraft_id}", 
+                           linewidth=2, alpha=0.7)
+                    
+                    # Mark conflict point
+                    if positions:
+                        ax.scatter(x_coords[0], y_coords[0], 
+                                 color=color, s=100, marker='o', alpha=0.8)
+    
+    ax.set_xlabel('Longitude')
+    ax.set_ylabel('Latitude')
+    ax.set_title('Aircraft Trajectories in Conflict Scenarios')
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / 'aircraft_trajectories.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+def plot_conflict_timeline(conflicts: List[Dict], output_dir: Path):
+    """Plot conflict detection and resolution timeline."""
+    fig, ax = plt.subplots(figsize=(14, 8))
+    
+    timeline_data = []
+    for i, conflict in enumerate(conflicts):
+        detection_time = conflict.get('detection_time', 0)
+        resolution_time = conflict.get('resolution_time', detection_time + 60)
+        severity = conflict.get('severity', 'medium')
+        
+        timeline_data.append({
+            'conflict_id': i,
+            'detection_time': detection_time,
+            'resolution_time': resolution_time,
+            'duration': resolution_time - detection_time,
+            'severity': severity
+        })
+    
+    df = pd.DataFrame(timeline_data)
+    
+    # Color mapping for severity
+    severity_colors = {'low': 'green', 'medium': 'orange', 'high': 'red', 'critical': 'darkred'}
+    
+    for idx, row in df.iterrows():
+        color = severity_colors.get(row['severity'], 'gray')
+        ax.barh(row['conflict_id'], row['duration'], 
+               left=row['detection_time'], color=color, alpha=0.7)
+    
+    ax.set_xlabel('Time (seconds)')
+    ax.set_ylabel('Conflict ID')
+    ax.set_title('Conflict Detection and Resolution Timeline')
+    ax.grid(True, alpha=0.3)
+    
+    # Create legend
+    legend_elements = [plt.Rectangle((0,0),1,1, color=color, alpha=0.7, label=severity.title()) 
+                      for severity, color in severity_colors.items()]
+    ax.legend(handles=legend_elements, loc='upper right')
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / 'conflict_timeline.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+def plot_resolution_effectiveness(conflicts: List[Dict], output_dir: Path):
+    """Plot resolution method effectiveness."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+    
+    # Resolution method distribution
+    resolution_methods = {}
+    resolution_success = {}
+    
+    for conflict in conflicts:
+        method = conflict.get('resolution_method', 'Unknown')
+        success = conflict.get('resolution_success', False)
+        
+        resolution_methods[method] = resolution_methods.get(method, 0) + 1
+        if method not in resolution_success:
+            resolution_success[method] = {'success': 0, 'total': 0}
+        
+        resolution_success[method]['total'] += 1
+        if success:
+            resolution_success[method]['success'] += 1
+    
+    # Plot method distribution
+    methods = list(resolution_methods.keys())
+    counts = list(resolution_methods.values())
+    
+    ax1.pie(counts, labels=methods, autopct='%1.1f%%', startangle=90)
+    ax1.set_title('Resolution Method Distribution')
+    
+    # Plot success rates
+    success_rates = []
+    for method in methods:
+        rate = (resolution_success[method]['success'] / 
+                resolution_success[method]['total'] * 100)
+        success_rates.append(rate)
+    
+    bars = ax2.bar(methods, success_rates, color=['green', 'orange', 'red', 'blue'][:len(methods)])
+    ax2.set_ylabel('Success Rate (%)')
+    ax2.set_title('Resolution Method Success Rates')
+    ax2.set_ylim(0, 100)
+    
+    # Add value labels on bars
+    for bar, rate in zip(bars, success_rates):
+        height = bar.get_height()
+        ax2.text(bar.get_x() + bar.get_width()/2., height,
+                f'{rate:.1f}%', ha='center', va='bottom')
+    
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig(output_dir / 'resolution_effectiveness.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+def plot_conflict_severity_distribution(conflicts: List[Dict], output_dir: Path):
+    """Plot conflict severity distribution over time."""
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    # Group conflicts by severity and time
+    severity_counts = {'low': 0, 'medium': 0, 'high': 0, 'critical': 0}
+    
+    for conflict in conflicts:
+        severity = conflict.get('severity', 'medium')
+        severity_counts[severity] = severity_counts.get(severity, 0) + 1
+    
+    # Create bar chart
+    severities = list(severity_counts.keys())
+    counts = list(severity_counts.values())
+    colors = ['green', 'orange', 'red', 'darkred']
+    
+    bars = ax.bar(severities, counts, color=colors, alpha=0.7)
+    
+    ax.set_ylabel('Number of Conflicts')
+    ax.set_title('Conflict Severity Distribution')
+    ax.grid(True, alpha=0.3, axis='y')
+    
+    # Add value labels on bars
+    for bar, count in zip(bars, counts):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+                str(count), ha='center', va='bottom')
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / 'severity_distribution.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+def generate_summary_report(conflicts: List[Dict], output_dir: Path):
+    """Generate a summary report of all visualizations."""
+    total_conflicts = len(conflicts)
+    avg_resolution_time = np.mean([c.get('resolution_time', 60) - c.get('detection_time', 0) 
+                                  for c in conflicts]) if conflicts else 0
+    
+    successful_resolutions = sum(1 for c in conflicts if c.get('resolution_success', False))
+    success_rate = (successful_resolutions / total_conflicts * 100) if total_conflicts > 0 else 0
+    
+    report = f"""
+# Conflict Visualization Summary Report
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## Overview
+- Total Conflicts Analyzed: {total_conflicts}
+- Average Resolution Time: {avg_resolution_time:.2f} seconds
+- Overall Success Rate: {success_rate:.1f}%
+- Successful Resolutions: {successful_resolutions}/{total_conflicts}
+
+## Generated Visualizations
+1. **Aircraft Trajectories** (`aircraft_trajectories.png`)
+   - Shows flight paths and conflict locations
+   
+2. **Conflict Timeline** (`conflict_timeline.png`)
+   - Timeline of conflict detection and resolution
+   
+3. **Resolution Effectiveness** (`resolution_effectiveness.png`)
+   - Distribution and success rates of resolution methods
+   
+4. **Severity Distribution** (`severity_distribution.png`)
+   - Breakdown of conflicts by severity level
+
+## Analysis Notes
+- Visualizations are saved as high-resolution PNG files
+- Data processed from conflict scenarios and simulation results
+- Charts provide insights into system performance and conflict patterns
+"""
+    
+    with open(output_dir / 'visualization_summary.md', 'w') as f:
+        f.write(report)
+
+
+def main():
+    """Main function for conflict visualization."""
+    parser = argparse.ArgumentParser(description='Generate conflict visualization plots')
+    parser.add_argument('--data-file', type=str, 
+                       default='Output/scat_simulation_results_latest.json',
+                       help='Path to conflict data JSON file')
+    
+    args = parser.parse_args()
+    
+    # Generate timestamp and create organized output directory
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = get_output_path(TestTypes.VISUALIZATION, timestamp)
+    
+    data_file = Path(args.data_file)
+    
+    print(f"[STATS] Loading conflict data from {data_file}...")
+    print(f"[FOLDER] Output directory: {output_dir}")
+    
+    if not data_file.exists():
+        print(f"[ERROR] Data file not found: {data_file}")
+        print("[PROMPT] Creating sample visualization with mock data...")
+        
+        # Generate sample data for demonstration
+        sample_conflicts = [
+            {
+                'conflict_id': f'CONFLICT_{i}',
+                'detection_time': i * 30,
+                'resolution_time': i * 30 + 45 + np.random.randint(15, 60),
+                'severity': np.random.choice(['low', 'medium', 'high', 'critical']),
+                'resolution_method': np.random.choice(['altitude_change', 'heading_change', 'speed_adjustment']),
+                'resolution_success': np.random.choice([True, False], p=[0.8, 0.2]),
+                'aircraft_states': {
+                    f'AC{i}001': {
+                        'positions': [
+                            {'lat': 40.0 + i * 0.1, 'lon': -74.0 + i * 0.1},
+                            {'lat': 40.0 + i * 0.1 + 0.05, 'lon': -74.0 + i * 0.1 + 0.05}
+                        ]
+                    },
+                    f'AC{i}002': {
+                        'positions': [
+                            {'lat': 40.0 + i * 0.1 + 0.02, 'lon': -74.0 + i * 0.1 - 0.02},
+                            {'lat': 40.0 + i * 0.1 + 0.07, 'lon': -74.0 + i * 0.1 + 0.03}
+                        ]
+                    }
+                }
+            }
+            for i in range(10)
+        ]
+        conflicts = sample_conflicts
+    else:
+        data = load_conflict_data(data_file)
+        conflicts = data.get('conflicts', [])
+        
+        if not conflicts:
+            print("[WARN] No conflicts found in data file. Using sample data.")
+            conflicts = []
+    
+    print(f"📈 Generating visualizations for {len(conflicts)} conflicts...")
+    
+    # Generate all visualizations
+    plot_aircraft_trajectories(conflicts, output_dir)
+    plot_conflict_timeline(conflicts, output_dir)
+    plot_resolution_effectiveness(conflicts, output_dir)
+    plot_conflict_severity_distribution(conflicts, output_dir)
+    generate_summary_report(conflicts, output_dir)
+    
+    print(f"[OK] Visualizations generated successfully!")
+    print(f"[FOLDER] Output saved to: {output_dir.absolute()}")
+    print(f"[CHECK] Summary report: {output_dir / 'visualization_summary.md'}")
+
+
+if __name__ == "__main__":
+    main()

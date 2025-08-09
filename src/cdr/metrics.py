@@ -4,8 +4,8 @@ This module implements comprehensive performance metrics for conflict detection
 and resolution systems following Wolfgang (2011) aviation research standards.
 
 CORRECTED Wolfgang (2011) KPIs implemented:
-- TBAS: Time-Based Alerting Score = ∑(Min(Alert_Duration, Conflict_Duration)) / ∑(Conflict_Duration)
-- LAT: Loss of Alerting Time = ∑(Max(0, Conflict_Duration - Alert_Duration)) / ∑(Conflict_Duration)  
+- TBAS: Time-Based Alerting Score = sum(Min(Alert_Duration, Conflict_Duration)) / sum(Conflict_Duration)
+- LAT: Loss of Alerting Time = sum(Max(0, Conflict_Duration - Alert_Duration)) / sum(Conflict_Duration)  
 - PA: Predicted Alerts (count of alerts issued)
 - PI: Predicted Intrusions (count of conflicts that became actual intrusions)
 - DAT: Delay in Alert Time (average delay: actual_alert_time - ideal_alert_time)
@@ -458,7 +458,7 @@ class MetricsCollector:
     def _calculate_tbas(self) -> float:
         """Calculate Time-Based Alerting Score (CORRECTED).
         
-        TBAS = ∑(Min(Alert_Duration, Conflict_Duration)) / ∑(Conflict_Duration)
+        TBAS = sum(Min(Alert_Duration, Conflict_Duration)) / sum(Conflict_Duration)
         
         Measures the ratio of time that alerts correctly overlap with actual conflicts.
         Higher values indicate better temporal correlation between alerts and conflicts.
@@ -487,7 +487,7 @@ class MetricsCollector:
     def _calculate_lat(self) -> float:
         """Calculate Loss of Alerting Time (CORRECTED).
         
-        LAT = ∑(Max(0, Conflict_Duration - Alert_Duration)) / ∑(Conflict_Duration)
+        LAT = sum(Max(0, Conflict_Duration - Alert_Duration)) / sum(Conflict_Duration)
         
         Measures the proportion of conflict time where no alert was active.
         Lower values indicate better coverage of conflicts by alerts.
@@ -603,7 +603,7 @@ class MetricsCollector:
             intrusiveness = 0.0
             
             if resolution.new_heading_deg is not None:
-                # Heading change: normalize by max practical change (180°)
+                # Heading change: normalize by max practical change (180deg)
                 # For this implementation, assume moderate change
                 heading_weight = 0.5  # 50% of max intrusiveness
                 intrusiveness += heading_weight * 0.4  # 40% weight for heading
@@ -657,7 +657,7 @@ def summarize_run(run_stats: Dict[str, Any]) -> Dict[str, Any]:
         "conflicts_detected": int(run_stats.get("conflicts_detected", 0)),
         "conflicts_resolved": int(run_stats.get("conflicts_resolved", 0)),
         "loss_of_separation_events": int(run_stats.get("los", 0)),
-        # Wolfgang KPIs – use your computed values or 0.0 if absent
+        # Wolfgang KPIs - use your computed values or 0.0 if absent
         "TBAS": float(run_stats.get("TBAS", 0.0)),
         "LAT": float(run_stats.get("LAT", 0.0)),
         "PA": float(run_stats.get("PA", 0.0)),

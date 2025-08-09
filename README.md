@@ -108,7 +108,7 @@ pip install -r requirements.txt
 pip install -e .
 
 # Make CLI executable
-chmod +x cli.py  # Linux/macOS
+chmod +x bin/atc-llm.py  # Linux/macOS
 ```
 
 ### 2. Setup LLM Backend
@@ -123,17 +123,17 @@ ollama serve  # Keep this running in a separate terminal
 
 ```bash
 # Verify all components are working
-python cli.py health-check
+python bin/atc-llm.py health-check
 ```
 
 ### 4. Run Your First Simulation
 
 ```bash
 # Basic simulation with generated scenarios
-python cli.py simulate basic --aircraft 5 --duration 30
+python bin/atc-llm.py simulate basic --aircraft 5 --duration 30
 
 # Or with real SCAT data
-python cli.py simulate scat --scat-dir /path/to/scat --max-flights 3
+python bin/atc-llm.py simulate scat --scat-dir /path/to/scat --max-flights 3
 ```
 
 ---
@@ -292,34 +292,34 @@ config = ConfigurationSettings(
 
 ## 🖥️ Command Line Interface
 
-The system provides a comprehensive CLI for all operations through `cli.py`:
+The system provides a comprehensive CLI for all operations through `bin/atc-llm.py`:
 
 ### Core Commands
 
 #### System Health Check
 ```bash
 # Check all system components
-python cli.py health-check
+python bin/atc-llm.py health-check
 
 # Verbose health check with detailed output
-python cli.py health-check --verbose
+python bin/atc-llm.py health-check --verbose
 ```
 
 #### Simulations
 
 ```bash
 # Basic simulation with generated scenarios
-python cli.py simulate basic --aircraft 5 --duration 30 --llm-model llama3.1:8b
+python bin/atc-llm.py simulate basic --aircraft 5 --duration 30 --llm-model llama3.1:8b
 
 # SCAT data simulation
-python cli.py simulate scat \
+python bin/atc-llm.py simulate scat \
     --scat-dir /path/to/scat \
     --max-flights 5 \
     --scenarios-per-flight 3 \
     --output-dir results/
 
 # Real-time simulation with custom parameters
-python cli.py simulate basic \
+python bin/atc-llm.py simulate basic \
     --aircraft 10 \
     --duration 60 \
     --conflict-probability 0.4 \
@@ -330,14 +330,14 @@ python cli.py simulate basic \
 
 ```bash
 # Production batch processing
-python cli.py batch production \
+python bin/atc-llm.py batch production \
     --scat-dir /path/to/scat \
     --max-flights 10 \
     --scenarios-per-flight 5 \
     --output-dir production_results/
 
 # Skip prerequisite checks (for automated environments)
-python cli.py batch production \
+python bin/atc-llm.py batch production \
     --skip-checks \
     --max-flights 20
 ```
@@ -346,14 +346,14 @@ python cli.py batch production \
 
 ```bash
 # Compare baseline vs LLM performance
-python cli.py compare \
+python bin/atc-llm.py compare \
     --scat-path /path/to/scat \
     --max-flights 5 \
     --time-window 30 \
     --output comparison_results.json
 
 # Extended comparison with detailed metrics
-python cli.py compare \
+python bin/atc-llm.py compare \
     --scat-path /path/to/scat \
     --max-flights 10 \
     --time-window 60 \
@@ -365,29 +365,29 @@ python cli.py compare \
 
 ```bash
 # Run complete test suite
-python cli.py test
+python bin/atc-llm.py test
 
 # Run tests with coverage report
-python cli.py test --coverage
+python bin/atc-llm.py test --coverage
 
 # Run specific test patterns
-python cli.py test --test-pattern "test_llm*" --verbose
+python bin/atc-llm.py test --test-pattern "test_llm*" --verbose
 
 # Performance testing
-python cli.py test --test-pattern "test_performance*" --benchmark
+python bin/atc-llm.py test --test-pattern "test_performance*" --benchmark
 ```
 
 #### API Server
 
 ```bash
 # Start development server
-python cli.py server --port 8000 --debug
+python bin/atc-llm.py server --port 8000 --debug
 
 # Start production server
-python cli.py server --host 0.0.0.0 --port 8080
+python bin/atc-llm.py server --host 0.0.0.0 --port 8080
 
 # Start with custom configuration
-python cli.py server \
+python bin/atc-llm.py server \
     --host 127.0.0.1 \
     --port 9000 \
     --workers 4 \
@@ -398,10 +398,10 @@ python cli.py server \
 
 ```bash
 # Verify LLM connectivity
-python cli.py verify-llm --model llama3.1:8b
+python bin/atc-llm.py verify-llm --model llama3.1:8b
 
 # Test LLM with custom prompts
-python cli.py verify-llm \
+python bin/atc-llm.py verify-llm \
     --model llama3.1:8b \
     --test-conflict-detection \
     --test-resolution-generation
@@ -411,12 +411,12 @@ python cli.py verify-llm \
 
 ```bash
 # Generate conflict visualizations
-python cli.py visualize \
+python bin/atc-llm.py visualize \
     --data-file results/simulation_results.json \
     --output-dir visualizations/
 
 # Create performance dashboards
-python cli.py visualize \
+python bin/atc-llm.py visualize \
     --data-file results/batch_results.json \
     --dashboard \
     --include-metrics
@@ -444,10 +444,10 @@ python cli.py visualize \
 
 ```bash
 # 1. Check system health
-python cli.py health-check
+python bin/atc-llm.py health-check
 
 # 2. Run basic simulation
-python cli.py simulate basic \
+python bin/atc-llm.py simulate basic \
     --aircraft 5 \
     --duration 30 \
     --verbose
@@ -460,7 +460,7 @@ ls Output/
 
 ```bash
 # Process real aviation data
-python cli.py simulate scat \
+python bin/atc-llm.py simulate scat \
     --scat-dir /data/scat_extracted \
     --max-flights 10 \
     --scenarios-per-flight 5 \
@@ -468,21 +468,21 @@ python cli.py simulate scat \
     --verbose
 
 # Generate summary report
-python scripts/generate_report.py scat_results/
+# Analysis tools moved to tests/ scat_results/
 ```
 
 ### Example 3: Performance Comparison
 
 ```bash
 # Compare baseline vs LLM performance
-python cli.py compare \
+python bin/atc-llm.py compare \
     --scat-path /data/scat_extracted \
     --max-flights 8 \
     --time-window 45 \
     --output detailed_comparison.json
 
 # Visualize results
-python cli.py visualize \
+python bin/atc-llm.py visualize \
     --data-file detailed_comparison.json \
     --output-dir comparison_viz/
 ```
@@ -491,27 +491,27 @@ python cli.py visualize \
 
 ```bash
 # Run production batch with health checks
-python cli.py batch production \
+python bin/atc-llm.py batch production \
     --scat-dir /production/scat_data \
     --max-flights 50 \
     --scenarios-per-flight 10 \
     --output-dir /production/results
 
 # Process results
-python scripts/analyze_batch_results.py /production/results
+# Analysis tools moved to tests/ /production/results
 ```
 
 ### Example 5: Development and Testing
 
 ```bash
 # Run comprehensive tests
-python cli.py test --coverage --verbose
+python bin/atc-llm.py test --coverage --verbose
 
 # Start development server
-python cli.py server --debug --port 8000
+python bin/atc-llm.py server --debug --port 8000
 
 # Verify LLM integration
-python cli.py verify-llm --model llama3.1:8b
+python bin/atc-llm.py verify-llm --model llama3.1:8b
 ```
 
 ---
@@ -857,11 +857,16 @@ llm-bluesky-cdr/
 ├── src/api/                     # REST API
 │   ├── __init__.py
 │   └── service.py               # FastAPI application
+├── bin/                         # Executable scripts
+│   ├── atc-llm.py              # Main CLI interface
+│   ├── complete_scat_llm_simulation.py
+│   ├── enhanced_scat_llm_simulation.py
+│   └── batch_scat_llm_processor.py
 ├── tests/                       # Test suite
 │   ├── test_*.py                # Unit tests
 │   ├── integration/             # Integration tests
 │   └── fixtures/                # Test data
-├── scripts/                     # Utility scripts
+├── bin/                         # Executable scripts
 │   ├── repo_healthcheck.py      # System health check
 │   ├── complete_scat_llm_simulation.py
 │   └── enhanced_scat_llm_simulation.py
@@ -881,7 +886,7 @@ llm-bluesky-cdr/
    git checkout -b feature/new-feature
    
    # Make changes and test
-   python cli.py test --coverage
+   python bin/atc-llm.py test --coverage
    
    # Format code
    black src/ tests/
@@ -894,13 +899,13 @@ llm-bluesky-cdr/
 2. **Testing**
    ```bash
    # Run specific tests
-   python cli.py test --test-pattern "test_llm*"
+   python bin/atc-llm.py test --test-pattern "test_llm*"
    
    # Run integration tests
-   python cli.py test tests/integration/
+   python bin/atc-llm.py test tests/integration/
    
    # Performance testing
-   python cli.py test --benchmark
+   python bin/atc-llm.py test --benchmark
    ```
 
 3. **Code Quality**
@@ -933,34 +938,34 @@ llm-bluesky-cdr/
 #### Unit Tests
 ```bash
 # Run all unit tests
-python cli.py test
+python bin/atc-llm.py test
 
 # Run specific module tests
-python cli.py test --test-pattern "test_detect*"
+python bin/atc-llm.py test --test-pattern "test_detect*"
 
 # Run with coverage
-python cli.py test --coverage
+python bin/atc-llm.py test --coverage
 ```
 
 #### Integration Tests
 ```bash
 # Run integration tests
-python cli.py test tests/integration/
+python bin/atc-llm.py test tests/integration/
 
 # Test BlueSky integration
-python cli.py test --test-pattern "test_bluesky*"
+python bin/atc-llm.py test --test-pattern "test_bluesky*"
 
 # Test LLM integration
-python cli.py test --test-pattern "test_llm*"
+python bin/atc-llm.py test --test-pattern "test_llm*"
 ```
 
 #### Performance Tests
 ```bash
 # Run performance benchmarks
-python cli.py test --benchmark
+python bin/atc-llm.py test --benchmark
 
 # Stress testing
-python cli.py test --test-pattern "test_stress*"
+python bin/atc-llm.py test --test-pattern "test_stress*"
 ```
 
 ### Example Test Execution
@@ -1001,7 +1006,7 @@ def test_conflict_detection():
 
 ```bash
 # Generate HTML coverage report
-python cli.py test --coverage
+python bin/atc-llm.py test --coverage
 
 # View coverage report
 open htmlcov/index.html  # macOS
@@ -1030,13 +1035,13 @@ The system implements research-standard aviation CDR metrics:
 
 ```bash
 # Generate performance report
-python cli.py batch production \
+python bin/atc-llm.py batch production \
     --max-flights 20 \
     --scenarios-per-flight 10 \
     --generate-metrics
 
 # View metrics dashboard
-python cli.py visualize \
+python bin/atc-llm.py visualize \
     --data-file Output/metrics.json \
     --dashboard
 ```
@@ -1068,7 +1073,7 @@ ollama serve
 ollama pull llama3.1:8b
 
 # Test LLM connectivity
-python cli.py verify-llm --model llama3.1:8b
+python bin/atc-llm.py verify-llm --model llama3.1:8b
 ```
 
 #### BlueSky Connection Problems
@@ -1080,7 +1085,7 @@ bluesky --mode sim --fasttime
 telnet localhost 1337
 
 # Run system health check
-python cli.py health-check --verbose
+python bin/atc-llm.py health-check --verbose
 ```
 
 #### Performance Issues
@@ -1090,10 +1095,10 @@ htop  # Linux
 Task Manager  # Windows
 
 # Check simulation parameters
-python cli.py simulate basic --aircraft 2 --duration 10
+python bin/atc-llm.py simulate basic --aircraft 2 --duration 10
 
 # Reduce batch size
-python cli.py batch production --max-flights 2
+python bin/atc-llm.py batch production --max-flights 2
 ```
 
 #### Data Processing Errors
@@ -1105,7 +1110,7 @@ python -c "from src.cdr.scat_adapter import SCATAdapter; adapter = SCATAdapter('
 ls -la /path/to/scat/
 
 # Run with verbose logging
-python cli.py simulate scat --scat-dir /path/to/scat --verbose
+python bin/atc-llm.py simulate scat --scat-dir /path/to/scat --verbose
 ```
 
 ### Debug Mode
@@ -1113,13 +1118,13 @@ python cli.py simulate scat --scat-dir /path/to/scat --verbose
 ```bash
 # Enable debug logging
 export LOG_LEVEL=DEBUG
-python cli.py --verbose [command]
+python bin/atc-llm.py --verbose [command]
 
 # Run with Python debugger
 python -m pdb cli.py [command]
 
 # Generate diagnostic report
-python scripts/generate_diagnostic_report.py
+# Diagnostic tools available via health-check command
 ```
 
 ### Getting Help
@@ -1317,7 +1322,7 @@ ollama serve
 python bluesky_demo.py
 
 # Full SCAT+LLM simulation
-python scripts/complete_scat_llm_simulation.py
+python bin/complete_scat_llm_simulation.py
 ```
 
 ### 4. View Results
@@ -1736,7 +1741,7 @@ ATC_LLM/
 │       ├── metrics.py           # Performance metrics
 │       ├── scat_adapter.py      # Real data processing
 │       └── reporting.py         # Report generation
-├── scripts/                     # Simulation scripts
+├── bin/                         # Simulation scripts
 │   ├── complete_scat_llm_simulation.py
 │   ├── enhanced_scat_llm_simulation.py
 │   └── repo_healthcheck.py
@@ -1815,10 +1820,10 @@ def test_conflict_detection():
 
 ```bash
 # Format code with Black
-black src/ tests/ scripts/
+black src/ tests/ bin/
 
 # Lint with Ruff
-ruff check src/ tests/ scripts/
+ruff check src/ tests/ bin/
 
 # Type check with MyPy
 mypy src/
@@ -1851,23 +1856,23 @@ repos:
 
 | Script | Purpose | Usage |
 |--------|---------|-------|
-| `bluesky_demo.py` | Basic BlueSky demonstration | `python bluesky_demo.py` |
-| `demo_baseline_vs_llm.py` | Compare baseline vs LLM performance | `python demo_baseline_vs_llm.py` |
-| `complete_scat_llm_simulation.py` | Full SCAT+LLM integration | `python scripts/complete_scat_llm_simulation.py` |
-| `enhanced_scat_llm_simulation.py` | Advanced navigation simulation | `python scripts/enhanced_scat_llm_simulation.py` |
-| `repo_healthcheck.py` | System health validation | `python scripts/repo_healthcheck.py` |
+| `atc-llm.py` | Main CLI interface | `python bin/atc-llm.py --help` |
+| `complete_scat_llm_simulation.py` | Full SCAT+LLM integration | `python bin/complete_scat_llm_simulation.py` |
+| `enhanced_scat_llm_simulation.py` | Advanced navigation simulation | `python bin/enhanced_scat_llm_simulation.py` |
+| `batch_scat_llm_processor.py` | Batch processing | `python bin/batch_scat_llm_processor.py` |
+| `repo_healthcheck.py` | System health validation | `python bin/repo_healthcheck.py` |
 
 ### Example Script Usage
 
 ```bash
 # Run comprehensive SCAT simulation
-python scripts/complete_scat_llm_simulation.py
+python bin/complete_scat_llm_simulation.py
 
 # Run health check
-python scripts/repo_healthcheck.py --verbose
+python bin/repo_healthcheck.py --verbose
 
 # Run enhanced simulation with custom parameters
-python scripts/enhanced_scat_llm_simulation.py --cycles 30 --enable-llm
+python bin/enhanced_scat_llm_simulation.py --cycles 30 --enable-llm
 ```
 
 ## 📊 Performance Metrics
@@ -1952,7 +1957,7 @@ refactor: simplify geodesy calculations
 python -c "import bluesky; print(bluesky.__version__)"
 
 # Verify system requirements
-python scripts/repo_healthcheck.py --check-dependencies
+python bin/repo_healthcheck.py --check-dependencies
 ```
 
 #### LLM Integration Issues
@@ -1969,11 +1974,11 @@ python -c "from src.cdr.llm_client import LlamaClient; client = LlamaClient(); p
 
 ```bash
 # Check system resources
-python scripts/repo_healthcheck.py --check-performance
+python bin/repo_healthcheck.py --check-performance
 
 # Run with reduced aircraft count
 export MAX_AIRCRAFT=20
-python scripts/complete_scat_llm_simulation.py
+python bin/complete_scat_llm_simulation.py
 ```
 
 ### Debug Mode
@@ -1982,13 +1987,13 @@ Enable debug logging:
 
 ```bash
 export LOG_LEVEL=DEBUG
-python scripts/complete_scat_llm_simulation.py
+python bin/complete_scat_llm_simulation.py
 ```
 
 ### Getting Help
 
 1. **Check Documentation**: Review this README and `DEPENDENCY_MATRIX.md`
-2. **Run Health Check**: `python scripts/repo_healthcheck.py`
+2. **Run Health Check**: `python bin/repo_healthcheck.py`
 3. **Check Issues**: Look for similar problems in GitHub issues
 4. **Create Issue**: Provide logs, environment details, and reproduction steps
 

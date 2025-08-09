@@ -20,7 +20,7 @@ def test_acceptance_criteria():
         lookahead_time_min=10.0,
         min_horizontal_separation_nm=5.0,
         min_vertical_separation_ft=1000.0,
-        llm_model_name="llama-3.1-8b",
+        llm_model_name="llama3.1:8b",
         llm_temperature=0.1,
         llm_max_tokens=2048,
         safety_buffer_factor=1.2,
@@ -46,11 +46,11 @@ def test_acceptance_criteria():
     try:
         # Test the acceptance criteria: run with ownship_id and max_cycles=1 to test fetching
         pipeline.run(max_cycles=1, ownship_id="OWNSHIP")
-        print("✓ Acceptance criteria met: pipeline.run(..., ownship_id=...) fetched states without raising")
+        print("[OK] Acceptance criteria met: pipeline.run(..., ownship_id=...) fetched states without raising")
         return True
         
     except Exception as e:
-        print(f"✗ Acceptance criteria failed: {e}")
+        print(f"[FAIL] Acceptance criteria failed: {e}")
         return False
 
 

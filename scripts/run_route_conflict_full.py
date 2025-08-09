@@ -242,7 +242,7 @@ def _execute_llm_resolution(resolution_cmd: ResolutionCommand, bs: BlueSkyClient
     try:
         if resolution_cmd.resolution_type == ResolutionType.HEADING_CHANGE and resolution_cmd.new_heading_deg is not None:
             result = bs.set_heading(resolution_cmd.target_aircraft, resolution_cmd.new_heading_deg)
-            log.info("LLM Resolution: Set heading %s to %.1f° - %s", 
+            log.info("LLM Resolution: Set heading %s to %.1fdeg - %s", 
                     resolution_cmd.target_aircraft, resolution_cmd.new_heading_deg, "SUCCESS" if result else "FAILED")
             return result
         elif resolution_cmd.resolution_type == ResolutionType.ALTITUDE_CHANGE and resolution_cmd.new_altitude_ft is not None:
@@ -322,7 +322,7 @@ def main():
 
     # --- spawn an intruder to cross near the middle of the route
     mid = route[len(route)//2]
-    # place intruder start ~40 NM west of mid, flying eastbound (90°)
+    # place intruder start ~40 NM west of mid, flying eastbound (90deg)
     intr_lat, intr_lon = destination_point_nm(mid[0], mid[1], 270.0, 40.0)
     bs.create_aircraft("INTRUDER1", "B738", intr_lat, intr_lon, 90.0, CRUISE_ALT_FT, CRUISE_SPD_KT)
     log.info("Created INTRUDER1 with initial speed %d kt at lat=%.4f, lon=%.4f", CRUISE_SPD_KT, intr_lat, intr_lon)
@@ -374,7 +374,7 @@ def main():
     initial_states = _states_by_callsign(bs.get_aircraft_states())
     if "OWNSHIP" in initial_states:
         own = initial_states["OWNSHIP"]
-        log.info("Initial OWNSHIP state: lat=%.4f, lon=%.4f, hdg=%.1f°, spd=%.1fkt, alt=%.0fft", 
+        log.info("Initial OWNSHIP state: lat=%.4f, lon=%.4f, hdg=%.1fdeg, spd=%.1fkt, alt=%.0fft", 
                 float(own["lat"]), float(own["lon"]), float(own["hdg_deg"]), 
                 float(own["spd_kt"]), float(own["alt_ft"]))
     else:
@@ -382,7 +382,7 @@ def main():
     
     if "INTRUDER1" in initial_states:
         intr = initial_states["INTRUDER1"]
-        log.info("Initial INTRUDER1 state: lat=%.4f, lon=%.4f, hdg=%.1f°, spd=%.1fkt, alt=%.0fft", 
+        log.info("Initial INTRUDER1 state: lat=%.4f, lon=%.4f, hdg=%.1fdeg, spd=%.1fkt, alt=%.0fft", 
                 float(intr["lat"]), float(intr["lon"]), float(intr["hdg_deg"]), 
                 float(intr["spd_kt"]), float(intr["alt_ft"]))
     else:
@@ -457,7 +457,7 @@ def main():
 
         # Debug info every 10 iterations
         if stuck_counter % 10 == 0:
-            log.info("Debug: pos=(%.4f,%.4f), hdg=%.1f°, spd=%.1fkt, dist=%.2fNM to wpt %d", 
+            log.info("Debug: pos=(%.4f,%.4f), hdg=%.1fdeg, spd=%.1fkt, dist=%.2fNM to wpt %d", 
                     me_lat, me_lon, me_hdg, me_kt, dist_to_wpt, wpt_idx)
 
         # progress bar live metrics
@@ -487,7 +487,7 @@ def main():
         if abs(delta) > 1.0:
             result = bs.set_heading("OWNSHIP", cmd)
             if stuck_counter % 20 == 0:  # Debug every 20 iterations
-                log.info("Heading command: desired=%.1f°, current=%.1f°, delta=%.1f°, cmd=%.1f°, result=%s", 
+                log.info("Heading command: desired=%.1fdeg, current=%.1fdeg, delta=%.1fdeg, cmd=%.1fdeg, result=%s", 
                         desired_hdg, me_hdg, delta, cmd, result)
 
         # LLM-based conflict detection and resolution
@@ -556,7 +556,7 @@ def main():
                         else:
                             # Fallback to simple resolution if LLM fails
                             new_hdg = normalize_heading_deg(me_hdg + 30.0)
-                            log.info("Fallback resolution: Turning to %3.0f°", new_hdg)
+                            log.info("Fallback resolution: Turning to %3.0fdeg", new_hdg)
                             bs.set_heading("OWNSHIP", new_hdg)
                             
             except Exception as e:
@@ -567,7 +567,7 @@ def main():
                 t_cpa, h_sep, _ = project_cpa_minutes(a, b)
                 if 0.0 <= t_cpa <= LOOKAHEAD_MIN and h_sep < SEP_NM:
                     new_hdg = normalize_heading_deg(me_hdg + 30.0)
-                    log.info("Fallback conflict resolution: Turning to %3.0f°", new_hdg)
+                    log.info("Fallback conflict resolution: Turning to %3.0fdeg", new_hdg)
                     bs.set_heading("OWNSHIP", new_hdg)
 
         # watchdog: detect lack of closure for several ticks

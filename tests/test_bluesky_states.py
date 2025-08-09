@@ -31,7 +31,7 @@ def test_unit_conversions():
     print(f"Vertical speed: {vs_ms} m/s = {vs_fpm:.1f} fpm")
     assert abs(vs_fpm - 984.252) < 0.1, "Vertical speed conversion incorrect"
     
-    print("✓ All unit conversions are correct")
+    print("[OK] All unit conversions are correct")
 
 def test_bluesky_client():
     """Test BlueSky client initialization and basic functionality."""
@@ -43,34 +43,34 @@ def test_bluesky_client():
     # Test attributes
     assert hasattr(client, 'host'), "Client should have host attribute"
     assert hasattr(client, 'port'), "Client should have port attribute"
-    print(f"✓ Client configured with host={client.host}, port={client.port}")
+    print(f"[OK] Client configured with host={client.host}, port={client.port}")
     
     # Test connection (may fail if BlueSky not installed)
     try:
         connected = client.connect()
         if connected:
-            print("✓ BlueSky connection successful")
+            print("[OK] BlueSky connection successful")
             
             # Test state fetching
             states = client.get_aircraft_states()
-            print(f"✓ State fetch successful, found {len(states)} aircraft")
+            print(f"[OK] State fetch successful, found {len(states)} aircraft")
             
             if states:
                 state = states[0]
                 required_keys = ['id', 'lat', 'lon', 'alt_ft', 'hdg_deg', 'spd_kt', 'roc_fpm']
                 for key in required_keys:
                     assert key in state, f"Missing key: {key}"
-                print("✓ Aircraft state format is correct")
+                print("[OK] Aircraft state format is correct")
             
         else:
-            print("⚠ BlueSky connection failed (expected if BlueSky not installed)")
+            print("[WARN] BlueSky connection failed (expected if BlueSky not installed)")
             
     except ImportError as e:
-        print(f"⚠ BlueSky import failed: {e} (expected if BlueSky not installed)")
+        print(f"[WARN] BlueSky import failed: {e} (expected if BlueSky not installed)")
     except Exception as e:
-        print(f"⚠ BlueSky connection error: {e}")
+        print(f"[WARN] BlueSky connection error: {e}")
 
 if __name__ == "__main__":
     test_unit_conversions()
     test_bluesky_client()
-    print("\n✓ All tests completed")
+    print("\n[OK] All tests completed")

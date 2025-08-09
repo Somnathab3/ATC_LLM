@@ -161,7 +161,7 @@ class ConfigurationSettings(BaseModel):
     
     # LLM settings
     llm_enabled: bool = Field(True, description="Enable LLM for conflict resolution")
-    llm_model_name: str = Field("llama-3.1-8b", description="LLM model identifier")
+    llm_model_name: str = Field("llama3.1:8b", description="LLM model identifier")
     llm_temperature: float = Field(0.1, ge=0, le=1)
     llm_max_tokens: int = Field(2048, gt=0)
     

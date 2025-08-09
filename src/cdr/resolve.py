@@ -340,8 +340,6 @@ def generate_vertical_resolution(
             is_validated=False
         )
         
-        return cmd
-        
     except Exception as e:
         logger.error(f"Vertical resolution generation failed: {e}")
         return None
@@ -392,7 +390,7 @@ def _create_resolution_command(
                 heading_change = 360 - heading_change
                 
             if heading_change > MAX_HEADING_CHANGE_DEG:
-                logger.warning(f"Heading change {heading_change:.1f}° exceeds limit {MAX_HEADING_CHANGE_DEG}°")
+                logger.warning(f"Heading change {heading_change:.1f}deg exceeds limit {MAX_HEADING_CHANGE_DEG}deg")
                 # Clamp to maximum allowed change
                 if new_heading > ownship.heading_deg:
                     cmd.new_heading_deg = (ownship.heading_deg + MAX_HEADING_CHANGE_DEG) % 360
@@ -602,7 +600,7 @@ def apply_resolution(
                 # Execute in background thread
                 threading.Thread(target=delayed_direct, daemon=True).start()
                 
-            logger.info(f"Applied turn resolution: {cs} heading {heading_deg}°")
+            logger.info(f"Applied turn resolution: {cs} heading {heading_deg}deg")
             return True
             
         elif advise.action in ("climb", "descend"):

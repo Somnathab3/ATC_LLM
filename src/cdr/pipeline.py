@@ -82,7 +82,7 @@ class CDRPipeline:
                 error_msg = "CRITICAL FAILURE: BlueSky connection failed. Cannot proceed without BlueSky simulator."
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
-            logger.info("✓ BlueSky connection successful")
+            logger.info("[OK] BlueSky connection successful")
         except Exception as e:
             error_msg = f"CRITICAL FAILURE: BlueSky connection error: {e}. Cannot proceed without BlueSky simulator."
             logger.error(error_msg)
@@ -90,7 +90,7 @@ class CDRPipeline:
         
         # Validate LLM client (CRITICAL - no fallback) - Skip if explicitly disabled
         if hasattr(config, 'llm_enabled') and config.llm_enabled == False:
-            logger.info("✓ LLM client validation skipped (llm_enabled=False)")
+            logger.info("[OK] LLM client validation skipped (llm_enabled=False)")
         else:
             try:
                 # Test LLM connection/availability
@@ -99,7 +99,7 @@ class CDRPipeline:
                     error_msg = "CRITICAL FAILURE: LLM client validation failed. Cannot proceed without LLM."
                     logger.error(error_msg)
                     raise RuntimeError(error_msg)
-                logger.info("✓ LLM client validation successful")
+                logger.info("[OK] LLM client validation successful")
             except Exception as e:
                 error_msg = f"CRITICAL FAILURE: LLM client error: {e}. Cannot proceed without LLM."
                 logger.error(error_msg)
@@ -309,13 +309,13 @@ Air Traffic Control Conflict Resolution Task:
 OWNSHIP: {ownship['id']}
 - Position: ({ownship['lat']:.6f}, {ownship['lon']:.6f})
 - Altitude: {ownship['alt_ft']:.0f} ft
-- Heading: {ownship['hdg_deg']:.0f}°
+- Heading: {ownship['hdg_deg']:.0f}deg
 - Speed: {ownship['spd_kt']:.0f} kts
 
 INTRUDER: {intruder['id']}
 - Position: ({intruder['lat']:.6f}, {intruder['lon']:.6f})
 - Altitude: {intruder['alt_ft']:.0f} ft
-- Heading: {intruder['hdg_deg']:.0f}°
+- Heading: {intruder['hdg_deg']:.0f}deg
 - Speed: {intruder['spd_kt']:.0f} kts
 
 CONFLICT PREDICTION:

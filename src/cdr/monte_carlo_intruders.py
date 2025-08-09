@@ -12,6 +12,9 @@ from typing import List, Dict, Any, Tuple, Optional
 from dataclasses import dataclass
 from math import radians, sin, cos, sqrt, atan2, degrees, asin
 
+# Import geodesy functions from canonical location
+from .geodesy import haversine_nm, bearing_deg, destination_point_nm
+
 try:
     from scipy.spatial import KDTree
     scipy_available = True
@@ -32,36 +35,11 @@ logger = logging.getLogger(__name__)
 
 def haversine_distance_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate great circle distance in nautical miles."""
-    R = 6371.0  # Earth radius in km
-    φ1, λ1, φ2, λ2 = map(radians, (lat1, lon1, lat2, lon2))
-    dφ = φ2 - φ1
-    dλ = λ2 - λ1
-    a = sin(dφ/2)**2 + cos(φ1)*cos(φ2)*sin(dλ/2)**2
-    km = R * 2 * atan2(sqrt(a), sqrt(1 - a))
-    return km / 1.852
+    # Use the canonical geodesy function (which takes Coordinate tuples)
+    return haversine_nm((lat1, lon1), (lat2, lon2))
 
 
-def bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calculate bearing from point 1 to point 2 in degrees."""
-    φ1, λ1, φ2, λ2 = map(radians, (lat1, lon1, lat2, lon2))
-    y = sin(λ2-λ1)*cos(φ2)
-    x = cos(φ1)*sin(φ2) - sin(φ1)*cos(φ2)*cos(λ2-λ1)
-    bearing = atan2(y, x)
-    return (degrees(bearing) + 360) % 360
-
-
-def destination_point(lat: float, lon: float, bearing_deg: float, distance_nm: float) -> Tuple[float, float]:
-    """Calculate destination point given start point, bearing and distance."""
-    R = 6371.0 / 1.852  # Earth radius in nautical miles
-    
-    φ1 = radians(lat)
-    λ1 = radians(lon)
-    θ = radians(bearing_deg)
-    
-    φ2 = asin(sin(φ1)*cos(distance_nm/R) + cos(φ1)*sin(distance_nm/R)*cos(θ))
-    λ2 = λ1 + atan2(sin(θ)*sin(distance_nm/R)*cos(φ1), cos(distance_nm/R) - sin(φ1)*sin(φ2))
-    
-    return degrees(φ2), degrees(λ2)
+# bearing_deg and destination_point are imported from geodesy module
 
 
 @dataclass
@@ -303,7 +281,7 @@ class MonteCarloIntruderGenerator:
         conflict_distance = self.rng.uniform(1.0, self.params.conflict_zone_radius_nm)
         conflict_bearing = self.rng.uniform(0, 360)
         
-        intruder_lat, intruder_lon = destination_point(
+        intruder_lat, intruder_lon = destination_point_nm(
             path_point.latitude, path_point.longitude,
             conflict_bearing, conflict_distance
         )

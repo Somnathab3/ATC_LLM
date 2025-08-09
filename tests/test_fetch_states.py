@@ -20,7 +20,7 @@ def test_fetch_aircraft_states():
         lookahead_time_min=10.0,
         min_horizontal_separation_nm=5.0,
         min_vertical_separation_ft=1000.0,
-        llm_model_name="llama-3.1-8b",
+        llm_model_name="llama3.1:8b",
         llm_temperature=0.1,
         llm_max_tokens=2048,
         safety_buffer_factor=1.2,
@@ -45,7 +45,7 @@ def test_fetch_aircraft_states():
     # Verify log alias exists
     assert hasattr(pipeline, 'log'), "log alias missing"
     
-    print("✓ All structural tests passed")
+    print("[OK] All structural tests passed")
     
     # Test method signature - should accept ownship_id parameter
     try:
@@ -70,23 +70,23 @@ def test_fetch_aircraft_states():
         assert len(traffic) == 2, "Should have 2 traffic aircraft"
         assert all(t["id"] != "OWNSHIP" for t in traffic), "Traffic should not include ownship"
         
-        print("✓ Method functionality test passed")
+        print("[OK] Method functionality test passed")
         
         # Test with missing ownship
         ownship_missing, traffic_all = pipeline._fetch_aircraft_states("MISSING")
         assert ownship_missing is None, "Missing ownship should return None"
         assert len(traffic_all) == 3, "All aircraft should be in traffic when ownship not found"
         
-        print("✓ Missing ownship test passed")
+        print("[OK] Missing ownship test passed")
         
         # Restore original method
         pipeline.bs.get_aircraft_states = original_get_states
         
-        print("✓ All tests passed! _fetch_aircraft_states implementation is correct.")
+        print("[OK] All tests passed! _fetch_aircraft_states implementation is correct.")
         return True
         
     except Exception as e:
-        print(f"✗ Test failed: {e}")
+        print(f"[FAIL] Test failed: {e}")
         return False
 
 

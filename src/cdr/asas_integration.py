@@ -304,7 +304,7 @@ class BlueSkyASAS:
                     aircraft_id=aircraft_id,
                     command_type="HDG",
                     command_value=new_heading,
-                    reason=f"ASAS horizontal resolution: turn {turn_angle}° right",
+                    reason=f"ASAS horizontal resolution: turn {turn_angle}deg right",
                     timestamp=datetime.now()
                 )
             

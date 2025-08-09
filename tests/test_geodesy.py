@@ -32,7 +32,7 @@ class TestHaversine:
     
     def test_haversine_equator_distance(self):
         """Test distance calculation along equator."""
-        # 1 degree of longitude at equator ≈ 60 NM
+        # 1 degree of longitude at equator ~= 60 NM
         a = (0.0, 0.0)
         b = (0.0, 1.0)
         
@@ -41,7 +41,7 @@ class TestHaversine:
     
     def test_haversine_meridian_distance(self):
         """Test distance calculation along meridian."""
-        # 1 degree of latitude ≈ 60 NM
+        # 1 degree of latitude ~= 60 NM
         a = (0.0, 0.0)
         b = (1.0, 0.0)
         
@@ -66,7 +66,7 @@ class TestBearing:
         b = (0.0, 1.0)
         
         bearing = bearing_rad(a, b)
-        assert abs(bearing - math.pi/2) < 1e-6  # π/2 radians = East
+        assert abs(bearing - math.pi/2) < 1e-6  # pi/2 radians = East
     
     def test_bearing_south(self):
         """Test bearing calculation for southward direction."""
@@ -74,7 +74,7 @@ class TestBearing:
         b = (0.0, 0.0)
         
         bearing = bearing_rad(a, b)
-        assert abs(abs(bearing) - math.pi) < 1e-6  # ±π radians = South
+        assert abs(abs(bearing) - math.pi) < 1e-6  # +/-pi radians = South
     
     def test_bearing_west(self):
         """Test bearing calculation for westward direction."""
@@ -82,7 +82,7 @@ class TestBearing:
         b = (0.0, 0.0)
         
         bearing = bearing_rad(a, b)
-        assert abs(bearing - (-math.pi/2)) < 1e-6  # -π/2 radians = West
+        assert abs(bearing - (-math.pi/2)) < 1e-6  # -pi/2 radians = West
 
 
 class TestCPA:
@@ -180,7 +180,7 @@ class TestCrossTrackDistance:
         
         # Point should be to the right (positive distance)
         assert distance > 0
-        assert abs(distance - 60) < 5  # ~60 NM for 1° latitude difference
+        assert abs(distance - 60) < 5  # ~60 NM for 1deg latitude difference
     
     def test_cross_track_left_of_track(self):
         """Test point to the left of track."""
@@ -192,7 +192,7 @@ class TestCrossTrackDistance:
         
         # Point should be to the left (negative distance)
         assert distance < 0
-        assert abs(distance + 60) < 5  # ~-60 NM for 1° latitude difference
+        assert abs(distance + 60) < 5  # ~-60 NM for 1deg latitude difference
 
 
 class TestGeodecyEdgeCases:
@@ -206,7 +206,7 @@ class TestGeodecyEdgeCases:
         distance = haversine_nm(north_pole, south_pole)
         
         # Half circumference of Earth in nautical miles
-        expected = math.pi * 3440.065  # π * R_NM
+        expected = math.pi * 3440.065  # pi * R_NM
         assert abs(distance - expected) < 1.0
     
     def test_cpa_identical_aircraft(self):

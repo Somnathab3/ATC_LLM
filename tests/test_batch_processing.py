@@ -64,22 +64,22 @@ def test_monte_carlo_intruders():
         generator = MonteCarloIntruderGenerator(params)
         scenarios = generator.generate_scenarios_for_flight(flight_record)
         
-        logger.info(f"✓ Generated {len(scenarios)} scenarios for test flight")
+        logger.info(f"[OK] Generated {len(scenarios)} scenarios for test flight")
         
         # Test flight path analyzer
         analyzer = FlightPathAnalyzer(flight_record)
-        logger.info(f"✓ Flight path analyzer created with {len(analyzer.path_points)} points")
+        logger.info(f"[OK] Flight path analyzer created with {len(analyzer.path_points)} points")
         
         if scenarios:
             # Test intrusion detection
             intrusions = analyzer.detect_intrusions_along_path(scenarios[0].intruder_states)
-            logger.info(f"✓ Detected {len(intrusions)} intrusions in first scenario")
+            logger.info(f"[OK] Detected {len(intrusions)} intrusions in first scenario")
         
-        logger.info("✓ Monte Carlo intruder generation test PASSED")
+        logger.info("[OK] Monte Carlo intruder generation test PASSED")
         return True
         
     except Exception as e:
-        logger.error(f"✗ Monte Carlo test FAILED: {e}")
+        logger.error(f"[FAIL] Monte Carlo test FAILED: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -97,7 +97,7 @@ def test_batch_pipeline():
             lookahead_time_min=10.0,
             min_horizontal_separation_nm=5.0,
             min_vertical_separation_ft=1000.0,
-            llm_model_name="llama-3.1-8b",
+            llm_model_name="llama3.1:8b",
             llm_temperature=0.1,
             fast_time=True,
             sim_accel_factor=1.0
@@ -148,22 +148,22 @@ def test_batch_pipeline():
         
         # Test pipeline creation
         pipeline = CDRPipeline(config)
-        logger.info("✓ CDR Pipeline created successfully")
+        logger.info("[OK] CDR Pipeline created successfully")
         
         # Test run_for_flights method exists and is callable
         if hasattr(pipeline, 'run_for_flights'):
-            logger.info("✓ run_for_flights method exists")
+            logger.info("[OK] run_for_flights method exists")
             
             # Note: We don't actually run the simulation in this test
             # as it would require BlueSky connection
-            logger.info("✓ Batch pipeline test PASSED (method verification)")
+            logger.info("[OK] Batch pipeline test PASSED (method verification)")
             return True
         else:
-            logger.error("✗ run_for_flights method not found")
+            logger.error("[FAIL] run_for_flights method not found")
             return False
         
     except Exception as e:
-        logger.error(f"✗ Batch pipeline test FAILED: {e}")
+        logger.error(f"[FAIL] Batch pipeline test FAILED: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -186,7 +186,7 @@ def test_schema_validation():
             climb_rate_fpm=2000.0,
             descent_rate_fpm=-1500.0
         )
-        logger.info("✓ FlightRecord validation passed")
+        logger.info("[OK] FlightRecord validation passed")
         
         # Test MonteCarloParameters
         params = MonteCarloParameters(
@@ -204,7 +204,7 @@ def test_schema_validation():
             airway_based_generation=False,
             weather_influence=False
         )
-        logger.info("✓ MonteCarloParameters validation passed")
+        logger.info("[OK] MonteCarloParameters validation passed")
         
         # Test BatchSimulationResult
         batch_result = BatchSimulationResult(
@@ -222,13 +222,13 @@ def test_schema_validation():
             minimum_separation_achieved_nm=5.0,
             safety_violations=0
         )
-        logger.info("✓ BatchSimulationResult validation passed")
+        logger.info("[OK] BatchSimulationResult validation passed")
         
-        logger.info("✓ Schema validation test PASSED")
+        logger.info("[OK] Schema validation test PASSED")
         return True
         
     except Exception as e:
-        logger.error(f"✗ Schema validation test FAILED: {e}")
+        logger.error(f"[FAIL] Schema validation test FAILED: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -251,13 +251,13 @@ def main():
         try:
             if test_func():
                 passed += 1
-                logger.info(f"✓ {test_name} PASSED")
+                logger.info(f"[OK] {test_name} PASSED")
             else:
                 failed += 1
-                logger.error(f"✗ {test_name} FAILED")
+                logger.error(f"[FAIL] {test_name} FAILED")
         except Exception as e:
             failed += 1
-            logger.error(f"✗ {test_name} FAILED with exception: {e}")
+            logger.error(f"[FAIL] {test_name} FAILED with exception: {e}")
     
     logger.info(f"\n=== Test Results ===")
     logger.info(f"Passed: {passed}")
@@ -265,10 +265,10 @@ def main():
     logger.info(f"Total: {passed + failed}")
     
     if failed == 0:
-        logger.info("🎉 All tests PASSED!")
+        logger.info("[SUCCESS] All tests PASSED!")
         return 0
     else:
-        logger.error(f"❌ {failed} test(s) FAILED")
+        logger.error(f"[ERROR] {failed} test(s) FAILED")
         return 1
 
 if __name__ == "__main__":

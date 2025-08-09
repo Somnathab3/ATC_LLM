@@ -70,7 +70,7 @@ def test_scat_loading():
         
         # Test file discovery
         scat_files = processor.discover_scat_files(pattern="*.json", max_files=5)
-        logger.info(f"✓ Discovered {len(scat_files)} SCAT files")
+        logger.info(f"[OK] Discovered {len(scat_files)} SCAT files")
         
         if scat_files:
             # Test loading one file
@@ -81,7 +81,7 @@ def test_scat_loading():
             
             if flight_records:
                 flight = flight_records[0]
-                logger.info(f"✓ Successfully loaded flight: {flight.flight_id}")
+                logger.info(f"[OK] Successfully loaded flight: {flight.flight_id}")
                 logger.info(f"  - Callsign: {flight.callsign}")
                 logger.info(f"  - Aircraft Type: {flight.aircraft_type}")
                 logger.info(f"  - Waypoints: {len(flight.waypoints)}")
@@ -119,16 +119,16 @@ def test_scat_loading():
                 json.dump(sample_scat_data, f, indent=2)
             
             logger.info(f"Created test SCAT file: {test_file}")
-            logger.info("✓ SCAT file creation test passed")
+            logger.info("[OK] SCAT file creation test passed")
             
             # Clean up
             test_file.unlink()
         
-        logger.info("✓ SCAT batch processing test PASSED")
+        logger.info("[OK] SCAT batch processing test PASSED")
         return True
         
     except Exception as e:
-        logger.error(f"✗ SCAT batch processing test FAILED: {e}")
+        logger.error(f"[FAIL] SCAT batch processing test FAILED: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -185,17 +185,17 @@ def test_monte_carlo_integration():
         generator = MonteCarloIntruderGenerator(monte_carlo_params)
         scenarios = generator.generate_scenarios_for_flight(flight_record)
         
-        logger.info(f"✓ Generated {len(scenarios)} Monte Carlo scenarios for SCAT flight")
+        logger.info(f"[OK] Generated {len(scenarios)} Monte Carlo scenarios for SCAT flight")
         
         for i, scenario in enumerate(scenarios):
             logger.info(f"  Scenario {i+1}: {len(scenario.intruder_states)} intruders, "
                        f"conflicts={'Yes' if scenario.has_conflicts else 'No'}")
         
-        logger.info("✓ Monte Carlo integration test PASSED")
+        logger.info("[OK] Monte Carlo integration test PASSED")
         return True
         
     except Exception as e:
-        logger.error(f"✗ Monte Carlo integration test FAILED: {e}")
+        logger.error(f"[FAIL] Monte Carlo integration test FAILED: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -218,13 +218,13 @@ def main():
         try:
             if test_func():
                 passed += 1
-                logger.info(f"✓ {test_name} PASSED")
+                logger.info(f"[OK] {test_name} PASSED")
             else:
                 failed += 1
-                logger.error(f"✗ {test_name} FAILED")
+                logger.error(f"[FAIL] {test_name} FAILED")
         except Exception as e:
             failed += 1
-            logger.error(f"✗ {test_name} FAILED with exception: {e}")
+            logger.error(f"[FAIL] {test_name} FAILED with exception: {e}")
     
     logger.info(f"\n=== Test Results ===")
     logger.info(f"Passed: {passed}")
@@ -232,10 +232,10 @@ def main():
     logger.info(f"Total: {passed + failed}")
     
     if failed == 0:
-        logger.info("🎉 All tests PASSED!")
+        logger.info("[SUCCESS] All tests PASSED!")
         return 0
     else:
-        logger.error(f"❌ {failed} test(s) FAILED")
+        logger.error(f"[ERROR] {failed} test(s) FAILED")
         return 1
 
 

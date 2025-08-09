@@ -238,7 +238,7 @@ class Sprint5Reporter:
         ax2.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.savefig(output_dir / 'detection_performance.png', dpi=300, bbox_inches='tight')
+        plt.savefig(Path(output_dir) / 'detection_performance.png', dpi=300, bbox_inches='tight')
         plt.close()
     
     def _plot_resolution_performance(
