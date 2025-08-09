@@ -78,13 +78,21 @@ class LlamaClient:
             "Only JSON. No extra text."
         )
 
-    def build_resolve_prompt(self, detect_out: Dict[str, Any], config: Dict[str, Any]) -> str:
+    def build_resolve_prompt(self, detect_out: Dict[str, Any], config: Union[Dict[str, Any], Any]) -> str:
+        # Handle both dict and Pydantic object configs
+        if hasattr(config, 'max_resolution_angle_deg'):
+            max_angle = config.max_resolution_angle_deg
+        elif isinstance(config, dict):
+            max_angle = config.get('max_resolution_angle_deg', 30)
+        else:
+            max_angle = 30
+            
         return (
             "You are an ATC conflict resolver. "
             "Given a detected conflict, return strict JSON:\n"
             '{"action":"turn|climb|descend","params":{},"ratio":0.0,"reason":"<text>"}\n'
             f"Detection: {json.dumps(detect_out)}\n"
-            f"Constraints: {json.dumps({'max_resolution_angle_deg': config.get('max_resolution_angle_deg', 30)})}\n"
+            f"Constraints: {json.dumps({'max_resolution_angle_deg': max_angle})}\n"
             "Only JSON. No extra text."
         )
 
@@ -182,12 +190,16 @@ class LlamaClient:
                 config = {"lookahead_time_min": data.get("lookahead_minutes", 10)}
                 
                 if self.use_mock:
-                    result = self._get_mock_json_response("detect", intruders=intruders, lookahead_time_min=config.get("lookahead_time_min"))
+                    error_msg = "CRITICAL ERROR: LLM mock mode is disabled. Real LLM connection required."
+                    LOG.error(error_msg)
+                    raise RuntimeError(error_msg)
                 else:
                     prompt = self.build_detect_prompt(own, intruders, config)
                     out = self._post_ollama(prompt)
                     if not out:
-                        result = self._get_mock_json_response("detect", intruders=intruders, lookahead_time_min=config.get("lookahead_time_min"))
+                        error_msg = "CRITICAL ERROR: LLM response failed. Cannot proceed without LLM."
+                        LOG.error(error_msg)
+                        raise RuntimeError(error_msg)
                     else:
                         result = out
                 
@@ -200,14 +212,9 @@ class LlamaClient:
                 return MockResult(**result)
                 
             except Exception as e:
-                LOG.warning("Schema processing failed: %s", e)
-                # Return a mock result instead of None
-                result = self._get_mock_json_response("detect", intruders=[], lookahead_time_min=10)
-                class MockResult:
-                    def __init__(self, **kwargs):
-                        for k, v in kwargs.items():
-                            setattr(self, k, v)
-                return MockResult(**result)
+                error_msg = f"CRITICAL ERROR: LLM processing failed: {e}. Cannot proceed without LLM."
+                LOG.error(error_msg)
+                raise RuntimeError(error_msg) from e
         else:
             # Handle dict/string inputs (original interface)
             if isinstance(input_data, str):
@@ -243,12 +250,16 @@ class LlamaClient:
                 config = {"max_resolution_angle_deg": 30}  # Default config
                 
                 if self.use_mock:
-                    result = self._get_mock_json_response("resolve", max_resolution_angle_deg=config.get("max_resolution_angle_deg"))
+                    error_msg = "CRITICAL ERROR: LLM mock mode is disabled. Real LLM connection required."
+                    LOG.error(error_msg)
+                    raise RuntimeError(error_msg)
                 else:
                     prompt = self.build_resolve_prompt(detect_out, config)
                     out = self._post_ollama(prompt)
                     if not out:
-                        result = self._get_mock_json_response("resolve", max_resolution_angle_deg=config.get("max_resolution_angle_deg"))
+                        error_msg = "CRITICAL ERROR: LLM resolution response failed. Cannot proceed without LLM."
+                        LOG.error(error_msg)
+                        raise RuntimeError(error_msg)
                     else:
                         result = out
                 
@@ -260,13 +271,9 @@ class LlamaClient:
                 
                 return MockResult(**result)
             except Exception as e:
-                LOG.warning("Schema processing failed: %s", e)
-                result = self._get_mock_json_response("resolve", max_resolution_angle_deg=30)
-                class MockResult:
-                    def __init__(self, **kwargs):
-                        for k, v in kwargs.items():
-                            setattr(self, k, v)
-                return MockResult(**result)
+                error_msg = f"CRITICAL ERROR: LLM resolution processing failed: {e}. Cannot proceed without LLM."
+                LOG.error(error_msg)
+                raise RuntimeError(error_msg) from e
         else:
             # Two parameter call: (detect_out, config)
             detect_out = detect_out_or_input
@@ -275,10 +282,14 @@ class LlamaClient:
             
             prompt = self.build_resolve_prompt(detect_out, config)
             if self.use_mock:
-                return self._get_mock_json_response("resolve", max_resolution_angle_deg=config.get("max_resolution_angle_deg"))
+                error_msg = "CRITICAL ERROR: LLM mock mode is disabled. Real LLM connection required."
+                LOG.error(error_msg)
+                raise RuntimeError(error_msg)
             out = self._post_ollama(prompt)
             if not out:
-                return self._get_mock_json_response("resolve", max_resolution_angle_deg=config.get("max_resolution_angle_deg"))
+                error_msg = "CRITICAL ERROR: LLM resolution response failed. Cannot proceed without LLM."
+                LOG.error(error_msg)
+                raise RuntimeError(error_msg)
             return out
 
     # ---------- parsers (normalize dicts/strings) ----------
@@ -340,8 +351,10 @@ class LlamaClient:
                 )
             except ImportError:
                 return result
-        except Exception:
-            return None
+        except Exception as e:
+            error_msg = f"CRITICAL ERROR: LLM detect processing failed: {e}. Cannot proceed without LLM."
+            LOG.error(error_msg)
+            raise RuntimeError(error_msg) from e
     
     def ask_resolve(self, data: str, conflict_info: Dict[str, Any]):
         """Test-compatible resolve method"""
@@ -413,7 +426,9 @@ class LlamaClient:
             retries = max_retries
         
         if self.use_mock:
-            return self._get_mock_json_response("detect")
+            error_msg = "CRITICAL ERROR: LLM mock mode is disabled. Real LLM connection required."
+            LOG.error(error_msg)
+            raise RuntimeError(error_msg)
         
         try:
             txt = self._post(prompt)
@@ -421,10 +436,12 @@ class LlamaClient:
                 return json.loads(txt)
             except Exception:
                 return self.extract_json_from_text(txt)
-        except Exception:
+        except Exception as e:
             if retries > 0:
                 return self.call_json(prompt + "\n\nReturn ONLY valid JSON.", schema_hint, retries - 1)
-            return self._get_mock_json_response("detect")
+            error_msg = f"CRITICAL ERROR: LLM JSON response failed after retries: {e}. Cannot proceed without LLM."
+            LOG.error(error_msg)
+            raise RuntimeError(error_msg) from e
 
 
 # Alias for backwards compatibility

@@ -18,7 +18,12 @@ from .detect import predict_conflicts
 from .resolve import generate_horizontal_resolution, generate_vertical_resolution, validate_resolution
 from .llm_client import LlamaClient
 from .metrics import MetricsCollector
-from .schemas import AircraftState, ConflictPrediction, ResolutionCommand, ResolutionType, ConfigurationSettings
+from .schemas import (
+    AircraftState, ConflictPrediction, ResolutionCommand, ResolutionType, 
+    ConfigurationSettings, FlightRecord, IntruderScenario, BatchSimulationResult,
+    MonteCarloParameters
+)
+from .monte_carlo_intruders import BatchIntruderGenerator, FlightPathAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +72,38 @@ class CDRPipeline:
         self.bluesky_client = BlueSkyClient(config)
         self.llm_client = LlamaClient(config)
         self.metrics = MetricsCollector()
+        
+        # Critical connections - MUST succeed or fail hard
+        logger.info("Connecting to critical systems...")
+        
+        # Connect to BlueSky (CRITICAL - no fallback)
+        try:
+            if not self.bluesky_client.connect():
+                error_msg = "CRITICAL FAILURE: BlueSky connection failed. Cannot proceed without BlueSky simulator."
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+            logger.info("✓ BlueSky connection successful")
+        except Exception as e:
+            error_msg = f"CRITICAL FAILURE: BlueSky connection error: {e}. Cannot proceed without BlueSky simulator."
+            logger.error(error_msg)
+            raise RuntimeError(error_msg) from e
+        
+        # Validate LLM client (CRITICAL - no fallback) - Skip if explicitly disabled
+        if hasattr(config, 'llm_enabled') and config.llm_enabled == False:
+            logger.info("✓ LLM client validation skipped (llm_enabled=False)")
+        else:
+            try:
+                # Test LLM connection/availability
+                test_result = self.llm_client.generate_resolution("TEST", config)
+                if not test_result:
+                    error_msg = "CRITICAL FAILURE: LLM client validation failed. Cannot proceed without LLM."
+                    logger.error(error_msg)
+                    raise RuntimeError(error_msg)
+                logger.info("✓ LLM client validation successful")
+            except Exception as e:
+                error_msg = f"CRITICAL FAILURE: LLM client error: {e}. Cannot proceed without LLM."
+                logger.error(error_msg)
+                raise RuntimeError(error_msg) from e
         
         # Aliases for compatibility
         self.bs = self.bluesky_client
@@ -172,8 +209,8 @@ class CDRPipeline:
             and traffic_states is list of dicts
         """
         raw = self.bs.get_aircraft_states()
-        own = next((r for r in raw if r["id"] == ownship_id), None)
-        traffic = [r for r in raw if r["id"] != ownship_id]
+        own = raw.get(ownship_id)
+        traffic = [state for callsign, state in raw.items() if callsign != ownship_id]
         if own is None:
             self.log.warning("Ownship %s not found in BS state", ownship_id)
         return own, traffic
@@ -454,6 +491,297 @@ Provide your resolution as JSON with fields: resolution_type (either "heading" o
         # Close BlueSky connections and clean up shapes
         if self.bluesky_client:
             self.bluesky_client.close()
+    
+    def run_for_flights(self, flight_records: List['FlightRecord'], max_cycles: Optional[int] = None,
+                       monte_carlo_params: Optional['MonteCarloParameters'] = None) -> 'BatchSimulationResult':
+        """Run batch simulation for multiple flights with Monte Carlo intruder generation.
+        
+        Args:
+            flight_records: List of flight records to simulate
+            max_cycles: Maximum cycles per scenario (None = use default)
+            monte_carlo_params: Parameters for Monte Carlo generation
+            
+        Returns:
+            BatchSimulationResult with aggregated metrics
+        """
+        from .monte_carlo_intruders import BatchIntruderGenerator
+        from datetime import datetime
+        
+        logger.info(f"Starting batch simulation for {len(flight_records)} flights")
+        
+        # Initialize Monte Carlo parameters if not provided
+        if monte_carlo_params is None:
+            monte_carlo_params = MonteCarloParameters(
+                scenarios_per_flight=10,
+                intruder_count_range=(1, 5),
+                conflict_zone_radius_nm=50.0,
+                non_conflict_zone_radius_nm=200.0,
+                altitude_spread_ft=10000.0,
+                time_window_min=60.0,
+                conflict_timing_variance_min=10.0,
+                conflict_probability=0.3,
+                speed_variance_kt=50.0,
+                heading_variance_deg=45.0,
+                realistic_aircraft_types=True,
+                airway_based_generation=False,
+                weather_influence=False
+            )
+        
+        # Generate intruder scenarios
+        intruder_generator = BatchIntruderGenerator(monte_carlo_params)
+        all_scenarios = intruder_generator.generate_scenarios_for_flights(flight_records)
+        
+        # Initialize batch result
+        simulation_id = f"batch_sim_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        batch_result = BatchSimulationResult(
+            simulation_id=simulation_id,
+            start_time=datetime.now(),
+            flight_records=[fr.flight_id for fr in flight_records],
+            scenarios_per_flight=monte_carlo_params.scenarios_per_flight,
+            total_scenarios=sum(len(scenarios) for scenarios in all_scenarios.values()),
+            total_conflicts_detected=0,
+            total_resolutions_attempted=0,
+            successful_resolutions=0,
+            false_positive_rate=0.0,
+            false_negative_rate=0.0,
+            average_resolution_time_sec=0.0,
+            minimum_separation_achieved_nm=5.0,
+            safety_violations=0
+        )
+        
+        # Process each flight and its scenarios
+        total_conflicts = 0
+        total_resolutions = 0
+        successful_resolutions = 0
+        all_resolution_times = []
+        min_separation = float('inf')
+        safety_violations = 0
+        
+        flight_results = {}
+        scenario_results = []
+        
+        for flight_record in flight_records:
+            logger.info(f"Processing flight {flight_record.flight_id}")
+            scenarios = all_scenarios[flight_record.flight_id]
+            
+            flight_metrics = {
+                'flight_id': flight_record.flight_id,
+                'scenarios_processed': 0,
+                'conflicts_detected': 0,
+                'resolutions_attempted': 0,
+                'successful_resolutions': 0,
+                'safety_violations': 0
+            }
+            
+            for scenario in scenarios:
+                scenario_metrics = self._run_single_scenario(
+                    flight_record, scenario, max_cycles or 120
+                )
+                
+                # Aggregate metrics
+                total_conflicts += scenario_metrics.get('conflicts_detected', 0)
+                total_resolutions += scenario_metrics.get('resolutions_attempted', 0)
+                successful_resolutions += scenario_metrics.get('successful_resolutions', 0)
+                
+                if 'resolution_times' in scenario_metrics:
+                    all_resolution_times.extend(scenario_metrics['resolution_times'])
+                
+                if 'minimum_separation_nm' in scenario_metrics:
+                    min_separation = min(min_separation, scenario_metrics['minimum_separation_nm'])
+                
+                safety_violations += scenario_metrics.get('safety_violations', 0)
+                
+                # Update flight metrics
+                flight_metrics['scenarios_processed'] += 1
+                flight_metrics['conflicts_detected'] += scenario_metrics.get('conflicts_detected', 0)
+                flight_metrics['resolutions_attempted'] += scenario_metrics.get('resolutions_attempted', 0)
+                flight_metrics['successful_resolutions'] += scenario_metrics.get('successful_resolutions', 0)
+                flight_metrics['safety_violations'] += scenario_metrics.get('safety_violations', 0)
+                
+                # Store scenario result
+                scenario_results.append({
+                    'flight_id': flight_record.flight_id,
+                    'scenario_id': scenario.scenario_id,
+                    'has_conflicts': scenario.has_conflicts,
+                    'expected_conflicts': len(scenario.expected_conflicts),
+                    **scenario_metrics
+                })
+                
+                logger.debug(f"Completed scenario {scenario.scenario_id}")
+            
+            flight_results[flight_record.flight_id] = flight_metrics
+            logger.info(f"Completed flight {flight_record.flight_id}: {flight_metrics}")
+        
+        # Calculate final metrics
+        batch_result.end_time = datetime.now()
+        batch_result.total_conflicts_detected = total_conflicts
+        batch_result.total_resolutions_attempted = total_resolutions
+        batch_result.successful_resolutions = successful_resolutions
+        
+        if total_resolutions > 0:
+            batch_result.false_positive_rate = max(0, (total_resolutions - total_conflicts) / total_resolutions)
+        
+        if all_resolution_times:
+            batch_result.average_resolution_time_sec = sum(all_resolution_times) / len(all_resolution_times)
+        
+        if min_separation != float('inf'):
+            batch_result.minimum_separation_achieved_nm = min_separation
+        
+        batch_result.safety_violations = safety_violations
+        batch_result.flight_results = flight_results
+        batch_result.scenario_results = scenario_results
+        
+        logger.info(f"Batch simulation completed: {batch_result}")
+        return batch_result
+    
+    def _run_single_scenario(self, flight_record: 'FlightRecord', scenario: 'IntruderScenario', 
+                           max_cycles: int) -> Dict[str, Any]:
+        """Run simulation for a single flight/scenario combination.
+        
+        Args:
+            flight_record: Flight data
+            scenario: Intruder scenario
+            max_cycles: Maximum simulation cycles
+            
+        Returns:
+            Dictionary with scenario metrics
+        """
+        from .monte_carlo_intruders import FlightPathAnalyzer
+        
+        logger.debug(f"Running scenario {scenario.scenario_id}")
+        
+        # Reset BlueSky state
+        self.bluesky_client.sim_reset()
+        
+        # Initialize metrics for this scenario
+        metrics = {
+            'conflicts_detected': 0,
+            'resolutions_attempted': 0,
+            'successful_resolutions': 0,
+            'resolution_times': [],
+            'minimum_separation_nm': float('inf'),
+            'safety_violations': 0,
+            'scenario_completed': False
+        }
+        
+        try:
+            # Create ownship in BlueSky
+            self._create_ownship_from_flight_record(flight_record)
+            
+            # Create intruder aircraft
+            for intruder_state in scenario.intruder_states:
+                self._create_aircraft_from_state(intruder_state)
+            
+            # Analyze flight path for intrusion detection
+            path_analyzer = FlightPathAnalyzer(flight_record)
+            
+            # Run simulation cycles
+            cycle = 0
+            while cycle < max_cycles and self.running:
+                start_time = time.time()
+                
+                # Execute standard CDR cycle
+                ownship, traffic = self._fetch_aircraft_states(flight_record.flight_id)
+                
+                if ownship is None:
+                    logger.warning(f"Ownship {flight_record.flight_id} not found in cycle {cycle}")
+                    break
+                
+                # Detect conflicts
+                conflicts = self._predict_conflicts(ownship, traffic)
+                metrics['conflicts_detected'] += len([c for c in conflicts if c.is_conflict])
+                
+                # Handle conflicts
+                for conflict in conflicts:
+                    if conflict.is_conflict:
+                        resolution_start = time.time()
+                        
+                        # Attempt resolution
+                        success = self._handle_conflict_with_metrics(conflict, ownship, traffic, metrics)
+                        
+                        metrics['resolutions_attempted'] += 1
+                        if success:
+                            metrics['successful_resolutions'] += 1
+                        
+                        resolution_time = time.time() - resolution_start
+                        metrics['resolution_times'].append(resolution_time)
+                
+                # Check intrusions using KDTree
+                intrusions = path_analyzer.detect_intrusions_along_path(
+                    [_dict_to_aircraft_state(state) for state in traffic]
+                )
+                
+                for intrusion in intrusions:
+                    sep_nm = intrusion['horizontal_separation_nm']
+                    if sep_nm < metrics['minimum_separation_nm']:
+                        metrics['minimum_separation_nm'] = sep_nm
+                    
+                    if intrusion['is_conflict']:
+                        metrics['safety_violations'] += 1
+                
+                # Advance simulation time
+                self.bluesky_client.step_minutes(self.config.polling_interval_min)
+                cycle += 1
+            
+            metrics['scenario_completed'] = True
+            
+        except Exception as e:
+            logger.error(f"Error in scenario {scenario.scenario_id}: {e}")
+            metrics['error'] = str(e)
+        
+        return metrics
+    
+    def _create_ownship_from_flight_record(self, flight_record: 'FlightRecord') -> bool:
+        """Create ownship aircraft in BlueSky from flight record."""
+        if not flight_record.waypoints:
+            return False
+        
+        # Start position
+        lat, lon = flight_record.waypoints[0]
+        alt_ft = flight_record.altitudes_ft[0]
+        speed_kt = flight_record.cruise_speed_kt
+        
+        # Create aircraft
+        cmd = f"CRE {flight_record.flight_id} {flight_record.aircraft_type} {lat} {lon} {alt_ft} {speed_kt}"
+        success = self.bluesky_client.stack(cmd)
+        
+        if success:
+            # Add waypoints to flight plan
+            for i in range(1, len(flight_record.waypoints)):
+                lat, lon = flight_record.waypoints[i]
+                alt_ft = flight_record.altitudes_ft[i]
+                waypoint_cmd = f"ADDWPT {flight_record.flight_id} {lat} {lon} {alt_ft}"
+                self.bluesky_client.stack(waypoint_cmd)
+            
+            logger.debug(f"Created ownship {flight_record.flight_id} with {len(flight_record.waypoints)} waypoints")
+        
+        return success
+    
+    def _create_aircraft_from_state(self, aircraft_state: 'AircraftState') -> bool:
+        """Create aircraft in BlueSky from AircraftState."""
+        cmd = (f"CRE {aircraft_state.aircraft_id} {aircraft_state.aircraft_type or 'B737'} "
+               f"{aircraft_state.latitude} {aircraft_state.longitude} "
+               f"{aircraft_state.altitude_ft} {aircraft_state.ground_speed_kt}")
+        
+        success = self.bluesky_client.stack(cmd)
+        
+        if success:
+            # Set heading
+            hdg_cmd = f"HDG {aircraft_state.aircraft_id} {aircraft_state.heading_deg}"
+            self.bluesky_client.stack(hdg_cmd)
+        
+        return success
+    
+    def _handle_conflict_with_metrics(self, conflict: ConflictPrediction, 
+                                    ownship: Dict[str, Any], traffic: List[Dict[str, Any]],
+                                    metrics: Dict[str, Any]) -> bool:
+        """Handle conflict and update metrics."""
+        try:
+            self._handle_conflict(conflict, ownship, traffic)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to resolve conflict: {e}")
+            return False
     
     def stop(self) -> None:
         """Stop the pipeline gracefully."""

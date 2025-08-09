@@ -1,2 +1,2 @@
 total_simulation_time_min,total_cycles,avg_cycle_time_sec,conflicts_detected,true_conflicts,false_positives,false_negatives,detection_accuracy,tbas,lat,pa,pi,dat,dfa,re,ri,rat,min_separation_achieved_nm,avg_separation_nm,safety_violations,total_resolutions_issued,successful_resolutions,resolution_success_rate,avg_resolution_time_sec,run_label,conflicts_resolved,conflict_resolution_efficiency,safety_score
-0.005038466666666667,0,0.0,0,0,0,0,0.0,0.0,0.0,0,0,0.0,0.0,0.0,0.0,0.0,inf,0.0,0,0,0,0.0,0.0,run,0,0.0,100.0
+0.007160966666666667,0,0.0,0,0,0,0,0.0,0.0,0.0,0,0,0.0,0.0,0.0,0.0,0.0,inf,0.0,0,0,0,0.0,0.0,run,0,0.0,100.0

@@ -68,16 +68,36 @@ class BlueSkyClient:
 
     # --- Commands ---
     def stack(self, cmd: str) -> bool:
+        """Execute a BlueSky command. Returns True if successful."""
+        if not self.is_connected():
+            error_msg = f"CRITICAL ERROR: BlueSky not connected. Cannot execute command: {cmd}"
+            log.error(error_msg)
+            raise RuntimeError(error_msg)
+        
         try:
             self.bs.stack(cmd)  # BlueSky stack returns None, not boolean
             log.debug("BS cmd OK: %s", cmd)
             return True
         except Exception as e:
-            log.exception("BS stack error: %s", e)
-            return False
+            error_msg = f"CRITICAL ERROR: BlueSky stack command failed: {cmd}"
+            log.exception(error_msg)
+            raise RuntimeError(error_msg) from e
+    
+    def is_connected(self) -> bool:
+        """Check if BlueSky is connected and ready."""
+        return self.bs is not None
+    
+    def is_mock_mode(self) -> bool:
+        """Check if we're running in mock mode (BlueSky not connected)."""
+        return not self.is_connected()
 
     def create_aircraft(self, cs: str, actype: str, lat: float, lon: float, hdg_deg: float, alt_ft: float, spd_kt: float) -> bool:
-        # Use BlueSky's direct traffic creation method
+        """Create an aircraft in BlueSky. Returns True if successful."""
+        if not self.is_connected():
+            error_msg = f"CRITICAL ERROR: BlueSky not connected. Cannot create aircraft {cs}"
+            log.error(error_msg)
+            raise RuntimeError(error_msg)
+            
         # Convert altitude from feet to meters (BlueSky uses meters)
         alt_m = alt_ft * 0.3048
         # Convert speed from knots to m/s (BlueSky uses m/s)
@@ -87,12 +107,15 @@ class BlueSkyClient:
             result = self.traf.cre(cs, actype, lat, lon, hdg_deg, alt_m, spd_ms)
             if result:
                 log.debug(f"Created aircraft {cs} at ({lat:.6f}, {lon:.6f})")
+                return True
             else:
-                log.error(f"Failed to create aircraft {cs}")
-            return bool(result)
+                error_msg = f"CRITICAL ERROR: BlueSky failed to create aircraft {cs}"
+                log.error(error_msg)
+                raise RuntimeError(error_msg)
         except Exception as e:
-            log.exception(f"Error creating aircraft {cs}: %s", e)
-            return False
+            error_msg = f"CRITICAL ERROR: Exception creating aircraft {cs}"
+            log.exception(error_msg)
+            raise RuntimeError(error_msg) from e
 
     def set_heading(self, cs: str, hdg_deg: float) -> bool:
         return self.stack(f"{cs} HDG {int(round(hdg_deg))}")
@@ -158,14 +181,13 @@ class BlueSkyClient:
         { '<CALLSIGN>': {'id','lat','lon','alt_ft','hdg_deg','spd_kt','roc_fpm'} }
         Fetched from BlueSky traf arrays with proper unit conversions.
         """
+        if not self.is_connected():
+            error_msg = "CRITICAL ERROR: BlueSky not connected. Cannot retrieve aircraft states"
+            log.error(error_msg)
+            raise RuntimeError(error_msg)
+            
         out: dict[str, dict[str, Any]] = {}
         try:
-            if not hasattr(self, "traf"):
-                log.warning("BlueSkyClient not connected. Attempting to connect()…")
-                if not self.connect():
-                    log.error("BlueSky connect() failed; returning empty state map.")
-                    return out
-
             traf = self.traf
             n = int(getattr(traf, "ntraf", 0))
 
@@ -203,8 +225,9 @@ class BlueSkyClient:
             return out
 
         except Exception as e:
-            log.exception("BS state fetch failed: %s", e)
-            return out
+            error_msg = "CRITICAL ERROR: BlueSky state fetch failed"
+            log.exception(error_msg)
+            raise RuntimeError(error_msg) from e
         
     def set_speed(self, cs: str, spd_kt: float) -> bool:
          return self.stack(f"{cs} SPD {int(round(spd_kt))}")

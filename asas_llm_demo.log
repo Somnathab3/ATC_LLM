@@ -1,0 +1,39 @@
+2025-08-08 18:06:35,827 - __main__ - INFO - Starting ASAS vs LLM Comprehensive Demonstration
+2025-08-08 18:06:35,828 - __main__ - INFO - === Testing Enhanced LLM Prompts ===
+2025-08-08 18:06:43,246 - src.cdr.enhanced_llm_client - INFO - LLM connection validated successfully
+2025-08-08 18:06:43,246 - __main__ - INFO - Detection prompt generated successfully
+2025-08-08 18:06:43,246 - __main__ - INFO - Resolution prompt generated successfully
+2025-08-08 18:06:43,246 - __main__ - INFO - Testing live LLM detection call...
+2025-08-08 18:07:08,034 - src.cdr.enhanced_llm_client - ERROR - JSON decode error in detection response: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+2025-08-08 18:07:08,034 - __main__ - INFO - Detection result: False conflicts detected
+2025-08-08 18:07:08,035 - __main__ - INFO - Enhanced LLM prompts test completed successfully
+2025-08-08 18:07:08,035 - __main__ - INFO - === Demonstrating BlueSky Commands ===
+2025-08-08 18:07:09,683 - src.cdr.bluesky_io - INFO - BlueSky stack ready.
+2025-08-08 18:07:10,693 - __main__ - INFO - Test aircraft created successfully
+2025-08-08 18:07:10,693 - __main__ - INFO - Executing command: TEST001 HDG 120
+2025-08-08 18:07:10,693 - __main__ - INFO - Sanitized command: TEST001 HDG 120
+2025-08-08 18:07:10,693 - src.cdr.enhanced_llm_client - INFO - Successfully executed BlueSky command: TEST001 HDG 120
+2025-08-08 18:07:10,693 - __main__ - INFO - Command execution: SUCCESS
+2025-08-08 18:07:11,694 - __main__ - INFO - Executing command: TEST001 ALT 37000
+2025-08-08 18:07:11,694 - __main__ - INFO - Sanitized command: TEST001 ALT 37000
+2025-08-08 18:07:11,694 - src.cdr.enhanced_llm_client - INFO - Successfully executed BlueSky command: TEST001 ALT 37000
+2025-08-08 18:07:11,694 - __main__ - INFO - Command execution: SUCCESS
+2025-08-08 18:07:12,695 - __main__ - INFO - Executing command: TEST001 SPD 480
+2025-08-08 18:07:12,695 - __main__ - INFO - Sanitized command: TEST001 SPD 480
+2025-08-08 18:07:12,695 - src.cdr.enhanced_llm_client - INFO - Successfully executed BlueSky command: TEST001 SPD 480
+2025-08-08 18:07:12,695 - __main__ - INFO - Command execution: SUCCESS
+2025-08-08 18:07:13,696 - __main__ - INFO - Final aircraft state:
+2025-08-08 18:07:13,696 - __main__ - INFO -   Position: 52.0000, 4.0000
+2025-08-08 18:07:13,696 - __main__ - INFO -   Altitude: 35000 ft
+2025-08-08 18:07:13,696 - __main__ - INFO -   Heading: 90°
+2025-08-08 18:07:13,696 - __main__ - INFO -   Speed: 713 kt
+2025-08-08 18:07:13,696 - __main__ - INFO - BlueSky commands demonstration complete
+2025-08-08 18:07:13,696 - __main__ - INFO - === Starting ASAS vs LLM Comparison ===
+2025-08-08 18:07:14,044 - src.cdr.bluesky_io - INFO - BlueSky stack ready.
+2025-08-08 18:07:14,044 - src.cdr.comparison_tool - INFO - Setting up ASAS system...
+2025-08-08 18:07:14,044 - src.cdr.asas_integration - INFO - ASAS configured successfully
+2025-08-08 18:07:14,044 - src.cdr.comparison_tool - INFO - Setting up LLM system...
+2025-08-08 18:07:17,546 - src.cdr.enhanced_llm_client - WARNING - LLM connection validation failed
+2025-08-08 18:07:17,546 - src.cdr.comparison_tool - ERROR - LLM setup failed - cannot proceed
+2025-08-08 18:07:17,546 - __main__ - ERROR - Failed to setup comparison systems
+2025-08-08 18:07:17,546 - __main__ - ERROR - ASAS vs LLM comparison failed

@@ -8,9 +8,7 @@ This module implements the core conflict detection logic that:
 """
 
 import math
-from typing import List, Dict, Tuple, Optional
-import numpy as np
-from .geodesy import cpa_nm
+from typing import List, Tuple
 from .schemas import ConflictPrediction, AircraftState
 
 
@@ -82,28 +80,11 @@ def predict_conflicts(
         # Compute CPA
         dmin_nm, tmin_min = cpa_nm(own_dict, intr_dict)
         
-        # Check if aircraft are diverging (range increasing)
-        # Calculate current range and range in 1 minute to determine if diverging
-        current_range = horizontal_distance
-        
-        # Project positions 1 minute forward to check range rate
-        future_own_lat = own_dict["lat"] + (own_dict["spd_kt"] / 60.0) * math.cos(math.radians(own_dict["hdg_deg"])) / 60.0
-        future_own_lon = own_dict["lon"] + (own_dict["spd_kt"] / 60.0) * math.sin(math.radians(own_dict["hdg_deg"])) / (60.0 * math.cos(math.radians(own_dict["lat"])))
-        future_intr_lat = intr_dict["lat"] + (intr_dict["spd_kt"] / 60.0) * math.cos(math.radians(intr_dict["hdg_deg"])) / 60.0
-        future_intr_lon = intr_dict["lon"] + (intr_dict["spd_kt"] / 60.0) * math.sin(math.radians(intr_dict["hdg_deg"])) / (60.0 * math.cos(math.radians(intr_dict["lat"])))
-        
-        future_range = haversine_nm((future_own_lat, future_own_lon), (future_intr_lat, future_intr_lon))
-        range_rate = future_range - current_range  # Positive = diverging, negative = converging
-        
-        # If aircraft are diverging and already at safe separation, no conflict
-        if range_rate > 0 and dmin_nm >= MIN_HORIZONTAL_SEP_NM:
-            continue
-        
         # Check conflict criteria
         future_alt_diff = abs(own_dict["alt_ft"] - intr_dict["alt_ft"])  # Assuming level flight
         
-        # Special case: if time to CPA is 0 and aircraft are diverging, no conflict
-        if tmin_min <= 0.1 and range_rate > 0:  # Small epsilon for floating point comparison
+        # Skip if time to CPA is negative (aircraft diverging)
+        if tmin_min <= 0:
             continue
             
         is_conflict_detected = is_conflict(dmin_nm, future_alt_diff, tmin_min)

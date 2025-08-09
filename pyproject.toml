@@ -4,18 +4,33 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-bluesky-cdr"
-version = "0.1.0"
+version = "1.0.0"
 description = "LLM-driven conflict detection and resolution for BlueSky"
-authors = [{name = "Your Name", email = "your.email@example.com"}]
+authors = [{name = "ATC LLM Team", email = "atc-llm@example.com"}]
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+]
+
+[project.scripts]
+atc-llm = "cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+    "pre-commit>=3.0",
 ]
 
 [project.urls]

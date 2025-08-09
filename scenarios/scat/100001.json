@@ -1,0 +1,62 @@
+{
+  "fpl": {
+    "fpl_base": [
+      {
+        "callsign": "NK102",
+        "aircraft_type": "B737",
+        "flight_rules": "I",
+        "wtc": "M",
+        "adep": "EFHK",
+        "ades": "ESSA",
+        "equip_status_rvsm": true
+      }
+    ]
+  },
+  "plots": [
+    {
+      "time_of_track": "2024-08-08T12:00:00.000000",
+      "I062/105": {"lat": 59.7240, "lon": 18.2442},
+      "I062/136": {"measured_flight_level": 350.0},
+      "I062/185": {"vx": -400.0, "vy": -200.0},
+      "I062/200": {"adf": false, "long": 0, "trans": 0, "vert": 0},
+      "I062/220": {"rocd": 0.0}
+    },
+    {
+      "time_of_track": "2024-08-08T12:02:00.000000",
+      "I062/105": {"lat": 59.7060, "lon": 18.1628},
+      "I062/136": {"measured_flight_level": 350.0},
+      "I062/185": {"vx": -400.0, "vy": -200.0},
+      "I062/200": {"adf": false, "long": 0, "trans": 0, "vert": 0},
+      "I062/220": {"rocd": 0.0}
+    },
+    {
+      "time_of_track": "2024-08-08T12:04:00.000000",
+      "I062/105": {"lat": 59.6880, "lon": 18.0814},
+      "I062/136": {"measured_flight_level": 350.0},
+      "I062/185": {"vx": -400.0, "vy": -200.0},
+      "I062/200": {"adf": false, "long": 0, "trans": 0, "vert": 0},
+      "I062/220": {"rocd": 0.0}
+    },
+    {
+      "time_of_track": "2024-08-08T12:06:00.000000",
+      "I062/105": {"lat": 59.6700, "lon": 18.0000},
+      "I062/136": {"measured_flight_level": 350.0},
+      "I062/185": {"vx": -400.0, "vy": -200.0},
+      "I062/200": {"adf": false, "long": 0, "trans": 0, "vert": 0},
+      "I062/220": {"rocd": 0.0}
+    },
+    {
+      "time_of_track": "2024-08-08T12:08:00.000000",
+      "I062/105": {"lat": 59.6519, "lon": 17.9186},
+      "I062/136": {"measured_flight_level": 350.0},
+      "I062/185": {"vx": -400.0, "vy": -200.0},
+      "I062/200": {"adf": false, "long": 0, "trans": 0, "vert": 0},
+      "I062/220": {"rocd": 0.0}
+    }
+  ],
+  "centre_ctrl": [
+    {
+      "centre_id": 1
+    }
+  ]
+}

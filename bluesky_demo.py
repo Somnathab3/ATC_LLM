@@ -29,9 +29,17 @@ try:
         # Get aircraft states
         states = client.get_aircraft_states()
         print(f'✓ Retrieved {len(states)} aircraft states')
+        print(f'State structure: {type(states)}')
+        if states:
+            print(f'First state: {states[0] if isinstance(states, (list, tuple)) else list(states.keys())[0]}')
         
-        for state in states:
-            print(f'  - {state["id"]}: Pos({state["lat"]:.3f}, {state["lon"]:.3f}), Alt={state["alt_ft"]:.0f}ft, Hdg={state["hdg_deg"]:.0f}°, Spd={state["spd_kt"]:.0f}kt')
+        # Handle states correctly - could be dict of callsign -> state_dict
+        if isinstance(states, dict):
+            for callsign, state in states.items():
+                print(f'  - {callsign}: Pos({state.get("lat", 0):.3f}, {state.get("lon", 0):.3f}), Alt={state.get("alt_ft", 0):.0f}ft, Hdg={state.get("hdg_deg", 0):.0f}°, Spd={state.get("spd_kt", 0):.0f}kt')
+        else:
+            for state in states:
+                print(f'  - {state.get("id", "Unknown")}: Pos({state.get("lat", 0):.3f}, {state.get("lon", 0):.3f}), Alt={state.get("alt_ft", 0):.0f}ft, Hdg={state.get("hdg_deg", 0):.0f}°, Spd={state.get("spd_kt", 0):.0f}kt')
         
         # Test commands
         print('✓ Testing ATC commands...')

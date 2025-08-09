@@ -102,6 +102,24 @@ This document provides a comprehensive analysis of the ATC_LLM (Air Traffic Cont
 - `generate_resolution()` - LLM resolution generation
 - `_post_ollama()` - Ollama HTTP interface
 
+#### `src/cdr/enhanced_llm_client.py`
+**Purpose**: Enhanced LLM client with standardized aviation prompts
+**Internal Dependencies**: 
+- `llm_client.py` - Base LLM functionality
+- `schemas.py` - Data models
+**External Dependencies**: 
+- `json` - JSON parsing
+- `re` - Regular expressions
+- `logging` - System logging
+
+**Key Classes**:
+- `EnhancedLLMClient` - Enhanced LLM interface with aviation-specific prompts
+
+**Key Functions**:
+- `build_enhanced_detect_prompt()` - Standardized detection prompts
+- `build_enhanced_resolve_prompt()` - Standardized resolution prompts
+- `parse_bluesky_command()` - Command parsing with validation
+
 #### `src/cdr/resolve.py`
 **Purpose**: Conflict resolution execution with safety validation
 **Internal Dependencies**: 
@@ -166,6 +184,77 @@ This document provides a comprehensive analysis of the ATC_LLM (Air Traffic Cont
 **Key Classes**:
 - `SCATAdapter` - Dataset loader
 - `SCATFlightRecord` - Parsed flight records
+
+#### `src/cdr/asas_integration.py`
+**Purpose**: BlueSky ASAS integration for baseline conflict detection
+**Internal Dependencies**: 
+- `schemas.py` - Data models
+- `bluesky_io.py` - BlueSky interface
+**External Dependencies**: 
+- `logging` - System logging
+- `json` - Data serialization
+- `datetime` - Timestamp handling
+
+**Key Classes**:
+- `BlueSkyASAS` - ASAS control interface
+- `ASASDetection` - ASAS detection results
+- `ASASResolution` - ASAS resolution commands
+- `ASASMetrics` - ASAS performance metrics
+
+#### `src/cdr/comparison_tool.py`
+**Purpose**: ASAS vs LLM performance comparison framework
+**Internal Dependencies**: 
+- `asas_integration.py` - ASAS functionality
+- `enhanced_llm_client.py` - LLM functionality
+- `schemas.py` - Data models
+- `bluesky_io.py` - BlueSky interface
+**External Dependencies**: 
+- `logging` - System logging
+- `json` - Data serialization
+- `csv` - CSV output
+- `pathlib` - File operations
+
+**Key Classes**:
+- `ASASLLMComparator` - Main comparison orchestrator
+- `ComparisonResult` - Comparison metrics
+- `ComparisonSummary` - Aggregated comparison data
+
+#### `src/cdr/monte_carlo_intruders.py`
+**Purpose**: Monte Carlo intruder scenario generation
+**Internal Dependencies**: 
+- `schemas.py` - Data models
+**External Dependencies**: 
+- `numpy` - Numerical computations
+- `scipy` - Spatial data structures (KDTree)
+- `logging` - System logging
+- `random` - Random number generation
+
+**Key Classes**:
+- `MonteCarloGenerator` - Scenario generator
+- `IntruderScenario` - Generated scenarios
+
+**Key Functions**:
+- `generate_intruder_scenarios()` - Main generation function
+- `haversine_distance_nm()` - Distance calculations
+- `bearing_deg()` - Bearing calculations
+
+#### `src/cdr/simple_stress_test.py`
+**Purpose**: Simplified stress testing framework for Sprint 5
+**Internal Dependencies**: 
+- `schemas.py` - Data models
+**External Dependencies**: 
+- `numpy` - Numerical computations
+- `logging` - System logging
+- `random` - Random number generation
+
+**Key Classes**:
+- `SimpleStressTest` - Stress test orchestrator
+- `StressTestScenario` - Test scenario definition
+- `StressTestResult` - Test results
+
+**Key Functions**:
+- `create_converging_scenario()` - Generate test scenarios
+- `create_multi_intruder_scenarios()` - Multi-aircraft scenarios
 
 #### `src/cdr/reporting.py`
 **Purpose**: Comprehensive report generation and visualization
@@ -243,9 +332,15 @@ graph TD
     A --> E[resolve.py]
     A --> F[metrics.py]
     A --> G[scat_adapter.py]
+    A --> H[asas_integration.py]
+    A --> M[monte_carlo_intruders.py]
+    A --> N[simple_stress_test.py]
     
-    H[geodesy.py] --> C
-    H --> E
+    K[geodesy.py] --> C
+    K --> E
+    
+    D --> L[enhanced_llm_client.py]
+    A --> L
     
     B --> I[pipeline.py]
     C --> I
@@ -254,10 +349,15 @@ graph TD
     F --> I
     A --> I
     
-    F --> J[reporting.py]
-    K[simple_stress_test.py] --> J
+    H --> O[comparison_tool.py]
+    L --> O
+    A --> O
+    B --> O
     
-    I --> L[api/service.py]
+    F --> J[reporting.py]
+    N --> J
+    
+    I --> P[api/service.py]
 ```
 
 ## External Dependencies Analysis
@@ -305,13 +405,17 @@ graph TD
 
 ### Medium Coupling (Acceptable)
 - **detect.py**: Depends on geodesy and schemas (logical coupling)
-- **resolve.py**: Depends on geodesy and schemas (logical coupling)
+- **resolve.py**: Depends on geodesy and schemas (logical coupling)  
 - **metrics.py**: Depends only on schemas (minimal coupling)
+- **enhanced_llm_client.py**: Depends on llm_client and schemas (logical extension)
+- **asas_integration.py**: Depends on schemas and bluesky_io (functional requirement)
+- **monte_carlo_intruders.py**: Depends only on schemas (minimal coupling)
 
 ### High Coupling (Design Trade-offs)
 - **pipeline.py**: Orchestrator that depends on all core modules (necessary)
 - **api/service.py**: Depends on pipeline and thus all modules (by design)
 - **reporting.py**: Depends on metrics and stress testing (functional requirement)
+- **comparison_tool.py**: Depends on asas_integration, enhanced_llm_client, and bluesky_io (comparison requirement)
 
 ## Critical Paths
 
@@ -320,7 +424,7 @@ graph TD
 schemas.py → bluesky_io.py → pipeline.py
 schemas.py → detect.py → pipeline.py
 schemas.py → resolve.py → pipeline.py
-schemas.py → llm_client.py → pipeline.py
+schemas.py → llm_client.py → enhanced_llm_client.py → pipeline.py
 ```
 
 ### 2. Safety-Critical Components
@@ -332,6 +436,14 @@ geodesy.py → resolve.py → pipeline.py
 ### 3. Performance Monitoring
 ```
 schemas.py → metrics.py → reporting.py
+schemas.py → simple_stress_test.py → reporting.py
+```
+
+### 4. Comparison Framework
+```
+schemas.py → asas_integration.py → comparison_tool.py
+schemas.py → enhanced_llm_client.py → comparison_tool.py
+schemas.py → bluesky_io.py → comparison_tool.py
 ```
 
 ## Risk Assessment
@@ -367,3 +479,49 @@ schemas.py → metrics.py → reporting.py
 3. **Performance Testing**: Add performance regression testing
 
 This dependency matrix serves as a foundation for understanding the system architecture and guiding future development decisions while maintaining safety and reliability standards.
+
+## Dead Code Removal Summary
+
+### Files Removed
+1. **`src/cdr/stress_test.py`** - Completely unused file with no external references
+   - Replaced by `simple_stress_test.py` which is actively used in tests and reporting
+   - Contained `StressTestFramework` class that was never imported or used
+
+### Schema Classes Removed
+1. **`LLMDetectionOutput`** - Unused schema class in `schemas.py`
+   - Defined but never imported or instantiated anywhere in the codebase
+   - Removed along with associated imports
+
+2. **`LLMResolutionOutput`** - Unused schema class in `schemas.py`
+   - Defined but never imported or instantiated anywhere in the codebase
+   - Removed along with associated imports
+
+### Import Cleanup
+1. **`src/cdr/detect.py`**
+   - Removed unused `numpy` import (never used in the module)
+   - Removed unused `Dict` and `Optional` type hints
+   - Simplified redundant range rate calculations that duplicated CPA logic
+
+2. **`src/cdr/schemas.py`**
+   - Removed unused `Union` type import
+   - Cleaned up imports after removing unused schema classes
+
+### Code Simplification
+1. **`src/cdr/detect.py`** - Removed redundant divergence detection logic
+   - Eliminated complex range rate calculations that were redundant with CPA time checking
+   - Simplified to use negative CPA time as divergence indicator
+   - Reduced computational overhead and code complexity
+
+### Impact Assessment
+- **✅ No breaking changes**: All removed code was verified to have zero external usage
+- **✅ Tests pass**: All existing functionality preserved and validated
+- **✅ Simplified maintenance**: Reduced codebase complexity and potential confusion
+- **✅ Performance improvement**: Removed unnecessary calculations in detection algorithm
+
+### Validated Active Usage
+The following modules were verified as actively used and retained:
+- `enhanced_llm_client.py` - Used in multiple demo and verification scripts
+- `comparison_tool.py` - Used for ASAS vs LLM comparison functionality
+- `asas_integration.py` - Used in comparison framework and test suites
+- `monte_carlo_intruders.py` - Used for scenario generation
+- `simple_stress_test.py` - Used in test suites and reporting

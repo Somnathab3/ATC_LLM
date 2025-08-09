@@ -8,8 +8,8 @@ Defines structured data models for:
 - Configuration parameters
 """
 
-from typing import List, Optional, Union, Dict, Any
-from pydantic import BaseModel, Field, validator
+from typing import List, Optional, Dict, Any, Tuple
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from enum import Enum
 
@@ -35,8 +35,9 @@ class AircraftState(BaseModel):
     aircraft_type: Optional[str] = None
     destination: Optional[str] = None
     
-    @validator('heading_deg')
-    def normalize_heading(cls, v):
+    @field_validator('heading_deg')
+    @classmethod
+    def normalize_heading(cls, v: float) -> float:
         """Normalize heading to [0, 360) range."""
         return v % 360.0
 
@@ -92,8 +93,9 @@ class ResolutionCommand(BaseModel):
     is_validated: bool = Field(False, description="Has passed safety validation")
     safety_margin_nm: float = Field(..., ge=0, description="Expected safety margin")
     
-    @validator('new_heading_deg')
-    def normalize_new_heading(cls, v):
+    @field_validator('new_heading_deg')
+    @classmethod
+    def normalize_new_heading(cls, v: Optional[float]) -> Optional[float]:
         """Normalize heading to [0, 360) range."""
         return v % 360.0 if v is not None else v
 
@@ -136,15 +138,6 @@ class LLMDetectionInput(BaseModel):
     context: Optional[str] = None
 
 
-class LLMDetectionOutput(BaseModel):
-    """Output format for LLM conflict detection."""
-    
-    conflicts_detected: List[ConflictPrediction]
-    assessment: str = Field(..., description="Natural language conflict assessment")
-    confidence: float = Field(..., ge=0, le=1)
-    reasoning: str = Field(..., description="Step-by-step detection reasoning")
-
-
 class LLMResolutionInput(BaseModel):
     """Input format for LLM resolution generation."""
     
@@ -153,16 +146,6 @@ class LLMResolutionInput(BaseModel):
     traffic: List[AircraftState]
     constraints: Dict[str, Any] = Field(default_factory=dict)
     context: Optional[str] = None
-
-
-class LLMResolutionOutput(BaseModel):
-    """Output format for LLM resolution generation."""
-    
-    recommended_resolution: ResolutionCommand
-    alternative_resolutions: List[ResolutionCommand] = Field(default_factory=list)
-    reasoning: str = Field(..., description="Resolution reasoning and safety analysis")
-    risk_assessment: str = Field(..., description="Risk evaluation of proposed resolution")
-    confidence: float = Field(..., ge=0, le=1)
 
 
 class ConfigurationSettings(BaseModel):
@@ -177,6 +160,7 @@ class ConfigurationSettings(BaseModel):
     min_vertical_separation_ft: float = Field(1000.0, gt=0)
     
     # LLM settings
+    llm_enabled: bool = Field(True, description="Enable LLM for conflict resolution")
     llm_model_name: str = Field("llama-3.1-8b", description="LLM model identifier")
     llm_temperature: float = Field(0.1, ge=0, le=1)
     llm_max_tokens: int = Field(2048, gt=0)
@@ -194,3 +178,105 @@ class ConfigurationSettings(BaseModel):
     # Fast-time simulation
     fast_time: bool = Field(True, description="If True, do not wall-sleep; advance sim time only")
     sim_accel_factor: float = Field(1.0, gt=0, description="Multiply simulated step length per cycle")
+
+
+class FlightRecord(BaseModel):
+    """Individual flight record for batch processing."""
+    
+    flight_id: str = Field(..., description="Unique flight identifier")
+    callsign: str = Field(..., description="Flight callsign")
+    aircraft_type: str = Field("B737", description="Aircraft type")
+    
+    # Flight path
+    waypoints: List[Tuple[float, float]] = Field(..., description="List of (lat, lon) waypoints")
+    altitudes_ft: List[float] = Field(..., description="Altitude at each waypoint")
+    timestamps: List[datetime] = Field(..., description="Timestamp at each waypoint")
+    
+    # Flight performance
+    cruise_speed_kt: float = Field(420.0, gt=0, description="Cruise speed in knots")
+    climb_rate_fpm: float = Field(2000.0, gt=0, description="Climb rate in feet per minute")
+    descent_rate_fpm: float = Field(-1500.0, lt=0, description="Descent rate in feet per minute")
+    
+    # Scenario metadata
+    scenario_type: str = Field("normal", description="Scenario type for analysis")
+    complexity_level: int = Field(1, ge=1, le=5, description="Complexity level 1-5")
+
+
+class IntruderScenario(BaseModel):
+    """Monte Carlo generated intruder scenario."""
+    
+    scenario_id: str = Field(..., description="Unique scenario identifier")
+    
+    # Intruder aircraft states
+    intruder_states: List[AircraftState] = Field(..., description="List of intruder aircraft states")
+    
+    # Scenario parameters
+    intruder_count: int = Field(..., ge=1, le=20, description="Number of intruder aircraft")
+    conflict_probability: float = Field(0.5, ge=0, le=1, description="Expected conflict probability")
+    geometric_complexity: float = Field(0.5, ge=0, le=1, description="Geometric complexity score")
+    
+    # Generation parameters
+    generation_seed: int = Field(..., description="Random seed for reproducibility")
+    airspace_bounds: Dict[str, float] = Field(..., description="Airspace bounds for generation")
+    
+    # Validation
+    has_conflicts: bool = Field(False, description="True if scenario contains conflicts")
+    expected_conflicts: List[str] = Field(default_factory=list, description="Expected conflict pairs")
+
+
+class BatchSimulationResult(BaseModel):
+    """Results from batch flight simulation."""
+    
+    simulation_id: str = Field(..., description="Unique simulation identifier")
+    start_time: datetime = Field(..., description="Simulation start time")
+    end_time: Optional[datetime] = None
+    
+    # Input parameters
+    flight_records: List[str] = Field(..., description="Flight IDs processed")
+    scenarios_per_flight: int = Field(..., description="Monte Carlo scenarios per flight")
+    total_scenarios: int = Field(..., description="Total scenarios processed")
+    
+    # Results aggregation
+    total_conflicts_detected: int = Field(0, description="Total conflicts detected")
+    total_resolutions_attempted: int = Field(0, description="Total resolutions attempted")
+    successful_resolutions: int = Field(0, description="Successfully resolved conflicts")
+    
+    # Performance metrics
+    false_positive_rate: float = Field(0.0, ge=0, le=1, description="False positive detection rate")
+    false_negative_rate: float = Field(0.0, ge=0, le=1, description="False negative detection rate")
+    average_resolution_time_sec: float = Field(0.0, ge=0, description="Average time to resolve conflicts")
+    
+    # Safety metrics
+    minimum_separation_achieved_nm: float = Field(5.0, ge=0, description="Minimum separation achieved")
+    safety_violations: int = Field(0, ge=0, description="Number of safety violations")
+    
+    # Detailed results per flight/scenario
+    flight_results: Dict[str, Any] = Field(default_factory=dict, description="Detailed results per flight")
+    scenario_results: List[Dict[str, Any]] = Field(default_factory=list, description="Results per scenario")
+
+
+class MonteCarloParameters(BaseModel):
+    """Parameters for Monte Carlo intruder generation."""
+    
+    # Generation parameters
+    scenarios_per_flight: int = Field(10, ge=1, le=100, description="Number of scenarios per flight")
+    intruder_count_range: Tuple[int, int] = Field((1, 8), description="Range of intruder aircraft per scenario")
+    
+    # Spatial parameters
+    conflict_zone_radius_nm: float = Field(50.0, gt=0, description="Radius around flight path to generate conflicts")
+    non_conflict_zone_radius_nm: float = Field(200.0, gt=0, description="Radius for non-conflicting traffic")
+    altitude_spread_ft: float = Field(10000.0, gt=0, description="Altitude spread for intruders")
+    
+    # Temporal parameters
+    time_window_min: float = Field(60.0, gt=0, description="Time window for conflict generation")
+    conflict_timing_variance_min: float = Field(10.0, ge=0, description="Variance in conflict timing")
+    
+    # Distribution parameters
+    conflict_probability: float = Field(0.3, ge=0, le=1, description="Probability of generating conflicts")
+    speed_variance_kt: float = Field(50.0, ge=0, description="Speed variance for intruders")
+    heading_variance_deg: float = Field(45.0, ge=0, le=180, description="Heading variance for intruders")
+    
+    # Realism parameters
+    realistic_aircraft_types: bool = Field(True, description="Use realistic aircraft performance")
+    airway_based_generation: bool = Field(False, description="Generate intruders on airways")
+    weather_influence: bool = Field(False, description="Include weather effects")

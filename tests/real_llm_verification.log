@@ -1,0 +1,52 @@
+2025-08-08 18:28:45,569 - __main__ - INFO - ============================================================
+2025-08-08 18:28:45,571 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 127.0.0.1:11434
+2025-08-08 18:28:45,593 - urllib3.connectionpool - DEBUG - http://127.0.0.1:11434 "GET /api/tags HTTP/1.1" 200 None
+2025-08-08 18:28:45,596 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 127.0.0.1:11434
+2025-08-08 18:28:55,942 - urllib3.connectionpool - DEBUG - http://127.0.0.1:11434 "POST /api/generate HTTP/1.1" 200 1259
+2025-08-08 18:28:55,955 - __main__ - DEBUG - Response preview: {
+  "status": "operational",
+  "current_time": "2023-02-20T14:30:00Z",
+  "verification_code": "ATC_456",
+  "test_calculation": "374",
+  "response_uniqueness": "842135"
+}...
+2025-08-08 18:28:55,958 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 127.0.0.1:11434
+2025-08-08 18:29:09,648 - urllib3.connectionpool - DEBUG - http://127.0.0.1:11434 "POST /api/generate HTTP/1.1" 200 None
+2025-08-08 18:29:09,649 - __main__ - DEBUG - Response preview: {
+  "conflict_detected": true,
+  "closest_approach_distance_nm": 2.5,
+  "time_to_closest_approach_min": 4.2,
+  "requires_resolution": true,
+  "assessment": "SAS101 and DLH456 are converging on a poten...
+2025-08-08 18:29:09,651 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 127.0.0.1:11434
+2025-08-08 18:29:20,415 - urllib3.connectionpool - DEBUG - http://127.0.0.1:11434 "POST /api/generate HTTP/1.1" 200 1852
+2025-08-08 18:29:20,416 - __main__ - DEBUG - Response preview: {
+    "action": "HEADING_CHANGE",
+    "new_heading_deg": 270,
+    "turn_direction": "right",
+    "bluesky_command": "SAS101 HDG 270",
+    "rationale": "To resolve the conflict, SAS101 will turn right ...
+2025-08-08 18:29:20,423 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 127.0.0.1:11434
+2025-08-08 18:29:40,280 - urllib3.connectionpool - DEBUG - http://127.0.0.1:11434 "POST /api/generate HTTP/1.1" 200 None
+2025-08-08 18:29:40,280 - __main__ - DEBUG - Response preview: {
+    "scat_analysis": {
+        "quality": "Good",
+        "aircraft_state": {
+            "position": "59.7240°N 18.2442°E",
+            "altitude": 35000,
+            "velocity": {
+                ...
+2025-08-08 18:29:40,283 - __main__ - INFO -    SCAT data: SAS101 at 59.7240, 18.2442
+2025-08-08 18:29:40,283 - __main__ - INFO -    LLM analysis: {'quality': 'Good', 'aircraft_state': {'position': '59.7240°N 18.2442°E', 'altitude': 35000, 'velocity': {'Vx': 400.0, 'Vy': 200.0}}, 'remarks': 'A320 aircraft at FL350, heading towards east'}
+2025-08-08 18:29:40,283 - __main__ - INFO -    BlueSky command: SAS101 HDG 270
+2025-08-08 18:29:40,283 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 127.0.0.1:11434
+2025-08-08 18:29:47,107 - urllib3.connectionpool - DEBUG - http://127.0.0.1:11434 "POST /api/generate HTTP/1.1" 200 1453
+2025-08-08 18:29:47,107 - __main__ - DEBUG - Response preview: Here is the response:
+
+```
+{
+  "iteration": 1,
+  "new_heading": 92,
+  "bluesky_command": "TEST123 HDG 92",
+  "reason": "Adjusting heading by 2° to maintain optimal flight path and avoid potential conf...
+2025-08-08 18:29:47,109 - urllib3.connectionpool - DEBUG - Starting new HTTP connection (1): 127.0.0.1:11434
