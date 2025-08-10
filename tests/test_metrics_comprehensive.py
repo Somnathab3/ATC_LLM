@@ -5,7 +5,6 @@ Tests metrics.py functionality including:
 - Violation counters
 - Engine usage tracking
 - Time to action metrics
-- Real-vs-LLM path deltas
 - Wolfgang KPI calculations
 
 Coverage target: ≥65%
@@ -17,7 +16,6 @@ import json
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import Mock, patch
 from typing import List, Dict, Any
 
 from src.cdr.metrics import (
@@ -28,7 +26,6 @@ from src.cdr.metrics import (
     summarize_run
 )
 from src.cdr.schemas import (
-    AircraftState,
     ConflictPrediction,
     ResolutionCommand,
     ResolutionType,
@@ -519,20 +516,34 @@ class TestMetricsSummaryGeneration:
             )
         
         # Add resolutions
-        resolution = ResolutionCommand(
-            resolution_id="RES001",
-            target_aircraft="AC001",
-            resolution_type=ResolutionType.HEADING_CHANGE,
-            source_engine=ResolutionEngine.HORIZONTAL,
-            new_heading_deg=090.0,
-            issue_time=datetime.now(),
-            priority="HIGH",
-            rationale="Conflict avoidance"
-        )
+        resolution = self.create_resolution_command("RES001", "AC001")
         
         issue_time = datetime.now()
         self.collector.record_resolution_issued(resolution, issue_time)
         self.collector.record_resolution_outcome("RES001", True, issue_time + timedelta(seconds=45))
+    
+    def create_resolution_command(self, resolution_id: str, target_aircraft: str) -> ResolutionCommand:
+        """Create a minimal resolution command for testing."""
+        return ResolutionCommand(
+            resolution_id=resolution_id,
+            target_aircraft=target_aircraft,
+            resolution_type=ResolutionType.HEADING_CHANGE,
+            source_engine=ResolutionEngine.HORIZONTAL,
+            new_heading_deg=90.0,
+            new_speed_kt=None,
+            new_altitude_ft=None,
+            waypoint_name=None,
+            waypoint_lat=None,
+            waypoint_lon=None,
+            diversion_distance_nm=None,
+            issue_time=datetime.now(),
+            is_validated=False,
+            safety_margin_nm=5.0,
+            is_ownship_command=True,
+            angle_within_limits=True,
+            altitude_within_limits=True,
+            rate_within_limits=True
+        )
     
     def test_generate_summary_basic(self):
         """Test basic summary generation."""
@@ -608,16 +619,7 @@ class TestBaselineComparison:
         self.collector.record_conflict_detection(conflicts, datetime.now())
         self.collector.record_separation(datetime.now(), "AC001", "AC002", 6.5)
         
-        resolution = ResolutionCommand(
-            resolution_id="RES001",
-            target_aircraft="AC001",
-            resolution_type=ResolutionType.HEADING_CHANGE,
-            source_engine=ResolutionEngine.HORIZONTAL,
-            new_heading_deg=090.0,
-            issue_time=datetime.now(),
-            priority="HIGH",
-            rationale="Conflict avoidance"
-        )
+        resolution = self.create_resolution_command("RES001", "AC001")
         
         issue_time = datetime.now()
         self.collector.record_resolution_issued(resolution, issue_time)
@@ -634,6 +636,29 @@ class TestBaselineComparison:
             baseline_min_separation_nm=4.5,
             baseline_avg_separation_nm=6.0,
             baseline_safety_violations=2
+        )
+    
+    def create_resolution_command(self, resolution_id: str, target_aircraft: str) -> ResolutionCommand:
+        """Create a minimal resolution command for testing."""
+        return ResolutionCommand(
+            resolution_id=resolution_id,
+            target_aircraft=target_aircraft,
+            resolution_type=ResolutionType.HEADING_CHANGE,
+            source_engine=ResolutionEngine.HORIZONTAL,
+            new_heading_deg=90.0,
+            new_speed_kt=None,
+            new_altitude_ft=None,
+            waypoint_name=None,
+            waypoint_lat=None,
+            waypoint_lon=None,
+            diversion_distance_nm=None,
+            issue_time=datetime.now(),
+            is_validated=False,
+            safety_margin_nm=5.0,
+            is_ownship_command=True,
+            angle_within_limits=True,
+            altitude_within_limits=True,
+            rate_within_limits=True
         )
     
     def test_compare_with_baseline(self):
@@ -720,7 +745,7 @@ class TestSummarizeRunFunction:
     
     def test_summarize_run_complete_data(self):
         """Test summarize_run with complete input data."""
-        input_stats = {
+        input_stats: Dict[str, Any] = {
             "conflicts_detected": 5,
             "conflicts_resolved": 3,
             "los": 1,
@@ -761,7 +786,7 @@ class TestSummarizeRunFunction:
     
     def test_summarize_run_missing_data(self):
         """Test summarize_run with missing input data."""
-        input_stats = {
+        input_stats: Dict[str, Any] = {
             "conflicts_detected": 2,
             # Missing most fields
             "extra_data": "preserved"
@@ -883,30 +908,60 @@ class TestEngineUsageTracking:
                 target_aircraft="AC001",
                 resolution_type=ResolutionType.HEADING_CHANGE,
                 source_engine=ResolutionEngine.HORIZONTAL,
-                new_heading_deg=090.0,
+                new_heading_deg=90.0,
+                new_speed_kt=None,
+                new_altitude_ft=None,
+                waypoint_name=None,
+                waypoint_lat=None,
+                waypoint_lon=None,
+                diversion_distance_nm=None,
                 issue_time=datetime.now(),
-                priority="HIGH",
-                rationale="Horizontal conflict avoidance"
+                is_validated=False,
+                safety_margin_nm=5.0,
+                is_ownship_command=True,
+                angle_within_limits=True,
+                altitude_within_limits=True,
+                rate_within_limits=True
             ),
             ResolutionCommand(
                 resolution_id="RES002",
                 target_aircraft="AC002",
                 resolution_type=ResolutionType.ALTITUDE_CHANGE,
                 source_engine=ResolutionEngine.VERTICAL,
+                new_heading_deg=None,
+                new_speed_kt=None,
                 new_altitude_ft=36000,
+                waypoint_name=None,
+                waypoint_lat=None,
+                waypoint_lon=None,
+                diversion_distance_nm=None,
                 issue_time=datetime.now(),
-                priority="MEDIUM",
-                rationale="Vertical conflict avoidance"
+                is_validated=False,
+                safety_margin_nm=5.0,
+                is_ownship_command=True,
+                angle_within_limits=True,
+                altitude_within_limits=True,
+                rate_within_limits=True
             ),
             ResolutionCommand(
                 resolution_id="RES003",
                 target_aircraft="AC003",
                 resolution_type=ResolutionType.SPEED_CHANGE,
                 source_engine=ResolutionEngine.DETERMINISTIC,
+                new_heading_deg=None,
                 new_speed_kt=420,
+                new_altitude_ft=None,
+                waypoint_name=None,
+                waypoint_lat=None,
+                waypoint_lon=None,
+                diversion_distance_nm=None,
                 issue_time=datetime.now(),
-                priority="LOW",
-                rationale="Speed adjustment"
+                is_validated=False,
+                safety_margin_nm=5.0,
+                is_ownship_command=True,
+                angle_within_limits=True,
+                altitude_within_limits=True,
+                rate_within_limits=True
             )
         ]
         
@@ -916,7 +971,7 @@ class TestEngineUsageTracking:
             collector.record_resolution_issued(resolution, base_time + timedelta(seconds=i*30))
         
         # Check engine distribution
-        engine_counts = {}
+        engine_counts: Dict[ResolutionEngine, int] = {}
         for resolution in collector.resolutions_issued:
             engine = resolution.source_engine
             engine_counts[engine] = engine_counts.get(engine, 0) + 1
@@ -956,10 +1011,20 @@ class TestTimeToActionMetrics:
             target_aircraft="AC001",
             resolution_type=ResolutionType.HEADING_CHANGE,
             source_engine=ResolutionEngine.HORIZONTAL,
-            new_heading_deg=090.0,
+            new_heading_deg=90.0,
+            new_speed_kt=None,
+            new_altitude_ft=None,
+            waypoint_name=None,
+            waypoint_lat=None,
+            waypoint_lon=None,
+            diversion_distance_nm=None,
             issue_time=datetime.now(),
-            priority="HIGH",
-            rationale="Conflict avoidance"
+            is_validated=False,
+            safety_margin_nm=5.0,
+            is_ownship_command=True,
+            angle_within_limits=True,
+            altitude_within_limits=True,
+            rate_within_limits=True
         )
         
         resolution_time = detection_time + timedelta(seconds=45)
@@ -976,15 +1041,50 @@ class TestTimeToActionMetrics:
         assert summary.resolution_success_rate == 1.0
 
 
+class TestAccuracyCalculation:
+    """Test detection accuracy calculation."""
+    
+    def test_compute_accuracy_safe(self):
+        """Test safe accuracy computation."""
+        collector = MetricsCollector()
+        
+        # Test the _compute_accuracy_safe method
+        accuracy = collector._compute_accuracy_safe()
+        
+        # With no data, should return 0.0
+        assert accuracy == 0.0
+        
+        # Add some conflicts and test again
+        conflicts = [
+            ConflictPrediction(
+                ownship_id="AC001",
+                intruder_id="AC002",
+                time_to_cpa_min=3.0,
+                distance_at_cpa_nm=2.0,
+                altitude_diff_ft=500,
+                is_conflict=True,
+                severity_score=0.8,
+                conflict_type="horizontal",
+                prediction_time=datetime.now(),
+                confidence=0.95
+            )
+        ]
+        
+        collector.record_conflict_detection(conflicts, datetime.now())
+        
+        # Should compute some accuracy
+        accuracy = collector._compute_accuracy_safe()
+        assert 0.0 <= accuracy <= 1.0
+
+
 class TestPathDeltaMetrics:
-    """Test real-vs-LLM path delta calculations (placeholder for future implementation)."""
+    """Test path delta calculations placeholder."""
     
     def test_path_delta_placeholder(self):
-        """Placeholder test for path delta calculations."""
+        """Placeholder test for future path delta implementation."""
         # This would test Hausdorff distance and cross-track error calculations
         # between planned and actual flight paths
         
-        # For now, just verify the collector can handle path data concepts
         collector = MetricsCollector()
         
         # Future implementation would include:
@@ -996,3 +1096,6 @@ class TestPathDeltaMetrics:
         assert hasattr(collector, 'generate_summary')
         
         # This test serves as a marker for future path delta implementation
+        # For now, verify basic functionality exists
+        summary = collector.generate_summary()
+        assert isinstance(summary, MetricsSummary)

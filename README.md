@@ -60,38 +60,55 @@ python cli.py health-check
 python bin/complete_llm_demo.py
 ```
 
-## � Usage
+## 🚀 Key Features (Updated)
 
-### Available Commands
+### Enhanced Reporting (NEW)
 
-The system provides several ways to run simulations:
+The system now includes comprehensive automatic reporting functionality with detailed per-conflict and per-scenario metrics.
 
+**Run enhanced reporting demonstration:**
 ```bash
-# Command-line interface (recommended for beginners)
-python cli.py --help
-
-# Pre-built demo scripts
-python bin/complete_llm_demo.py              # Basic LLM demo
-python bin/complete_scat_llm_simulation.py   # Full simulation with real data
-python bin/enhanced_scat_llm_simulation.py   # Advanced features demo
+python cli.py enhanced-reporting --flights 3 --intruders 5
 ```
 
-### Quick Examples
+**Features:**
+- ✅ **Per-conflict metrics**: Resolved (Y/N), Min-sep (NM), Time-to-action, Engine used
+- ✅ **Per-scenario logs**: Success rates, timing analysis, comprehensive tracking
+- ✅ **Resolution classification**: Waypoint vs heading based solutions
+- ✅ **CSV/JSON output**: Batch run outputs with detailed metrics
+- ✅ **Reality comparison**: Framework for SCAT vs BlueSky path analysis
+- ✅ **Operational impact**: Path deviation and effectiveness scoring
 
-**Run a basic conflict detection demo:**
-```bash
-python bin/complete_llm_demo.py
+**Example enhanced reporting output:**
+```
+ENHANCED REPORTING SUMMARY
+Total scenarios processed: 3
+Total conflicts detected: 12
+Conflicts resolved: 10
+Overall success rate: 83.3%
+Average time to action: 2.45 seconds
+Average minimum separation: 6.78 NM
+Separation violations: 2
+
+Engine Usage Breakdown:
+  - Horizontal: 6
+  - Vertical: 3
+  - Deterministic: 1
+  - Fallback: 2
+
+CSV Report: reports/enhanced_demo/enhanced_metrics_report_20250110_143022.csv
+JSON Report: reports/enhanced_demo/enhanced_metrics_report_20250110_143022.json
 ```
 
-**Process real aviation data (if you have SCAT files):**
-```bash
-python bin/complete_scat_llm_simulation.py
-```
-
-**Check what's available:**
-```bash
-python cli.py --help
-```
+**CSV Output includes:**
+- `resolved`: Y/N resolution success
+- `min_sep_nm`: Minimum separation achieved
+- `time_to_action_sec`: Time from detection to resolution command
+- `engine_used`: horizontal/vertical/deterministic/fallback
+- `waypoint_vs_heading`: Resolution approach classification
+- `resolution_effectiveness`: 0-1 effectiveness score
+- `operational_impact`: 0-1 operational disruption score
+- `path_deviation_total_nm`: Total path deviation from original
 
 ## 🔧 Installation
 
@@ -854,25 +871,51 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 </div>
 
-## 🚀 Key Features
+## 🚀 Key Features (Updated)
 
-### 🤖 Intelligent Conflict Resolution
+### 🤖 Enhanced Intelligent Conflict Resolution
+- **PromptBuilderV2**: Multi-intruder context with trend analysis for timely, stable LLM decisions
 - **Context-Aware LLM Prompts**: Detailed scenario information with navigation constraints
-- **Waypoint Intelligence**: Strategic rerouting using nearby navigation aids
+- **Adaptive Snapshot Intervals**: 1-2 minute cadence with conflict escalation for richer trend data
+- **Strict JSON Schema**: Enforced response format with example responses for consistent LLM output
 - **Multiple Resolution Types**: Turn maneuvers, altitude changes, direct-to-waypoint navigation
 - **Safety-First Instructions**: Clear constraints on separation maintenance and destination reaching
 
-### 🛩️ Advanced Flight Dynamics
+### 📈 Advanced Trend Analysis
+- **Aircraft Movement Tracking**: 2-minute rolling window for distance, altitude, speed, and heading changes
+- **Multi-Intruder Context**: Up to N configurable intruders within proximity/altitude filters (≤100 NM / ±5000 ft)
+- **Prioritized Filtering**: Conflict aircraft prioritized over nearby traffic in LLM prompts
+- **Real-Time Trends**: Delta calculations showing aircraft behavior patterns for informed decision-making
+
+### 🛩️ Advanced Flight Dynamics & Navigation
+- **Waypoint Resolution**: Integration with BlueSky navigation database for authentic waypoint navigation
+- **Named Fix Support**: LLM can direct aircraft to real aviation waypoints (VORs, intersections, airports)
 - **Heading-Based Movement**: Aircraft follow LLM guidance with realistic navigation
 - **Conflict Avoidance Maneuvers**: Authentic aircraft movement patterns
 - **Mission Constraint Awareness**: LLM considers efficiency and operational requirements
-- **Navigation Intelligence**: Integration with real-world waypoint data
 
-### 📊 Comprehensive Analytics
-- **Wolfgang (2011) KPIs**: Research-standard performance metrics
+### 📊 Comprehensive Analytics & Research Metrics
+- **Wolfgang (2011) KPIs**: Research-standard performance metrics implementation
+- **SCAT Baseline Analysis**: Comprehensive neighbor aircraft analysis for real-world scenarios
+- **Enhanced Reporting System**: Per-conflict and per-scenario detailed metrics
 - **Real-Time Monitoring**: Live conflict detection and resolution tracking
 - **Comparative Analysis**: Baseline vs LLM performance evaluation
 - **Visual Reports**: Charts, graphs, and performance summaries
+
+### 🔧 Production-Ready Tools
+- **Unified CLI Interface**: Single command-line interface for all system functions
+- **Real-Time SCAT Runner**: Process real aviation data with live visualization
+- **Batch Processing**: Production-scale processing capabilities
+- **System Health Monitoring**: Comprehensive diagnostics and validation
+- **LLM Connectivity Testing**: Automated verification of AI backend connectivity
+- **Stress Testing**: System performance validation under load
+
+### 🧪 Advanced Testing & Validation
+- **Comprehensive Test Suite**: Unit, integration, and end-to-end testing
+- **Enhanced Reporting Tests**: Validation of advanced metrics and reporting
+- **Wolfgang Metrics Testing**: Research-standard metrics validation
+- **Navigation Utilities Testing**: Waypoint resolution and navigation testing
+- **PromptBuilderV2 Testing**: Advanced prompt building validation
 
 ## 📋 Table of Contents
 
@@ -1043,6 +1086,78 @@ config = ConfigurationSettings(
 
 ## 📖 Usage
 
+### Available Commands
+
+The system provides a comprehensive CLI interface and multiple specialized scripts:
+
+#### CLI Commands (Recommended)
+
+```bash
+# System management
+python cli.py health-check                    # Verify system components
+python cli.py start-server                    # Launch REST API server
+python cli.py verify-llm                      # Test LLM connectivity
+
+# Simulation commands
+python cli.py simulate basic                  # Basic conflict detection demo
+python cli.py simulate scat                   # SCAT data integration demo
+python cli.py enhanced-reporting              # Advanced metrics demo
+
+# Analysis and reporting
+python cli.py scat-baseline                   # Generate SCAT baseline analysis
+python cli.py scat-llm-run                    # Run real-time LLM simulation
+python cli.py wolfgang-metrics                # Research-standard metrics
+python cli.py visualize-conflicts             # Conflict visualization
+
+# Batch processing
+python cli.py batch production                # Production batch processing
+python cli.py compare baseline-llm            # Baseline vs LLM comparison
+
+# Testing
+python cli.py test                            # Run test suite
+```
+
+#### Specialized Scripts
+
+```bash
+# Direct script execution for advanced users
+python bin/complete_llm_demo.py              # Basic LLM demo
+python bin/complete_scat_llm_simulation.py   # Full SCAT+LLM simulation
+python bin/enhanced_scat_llm_simulation.py   # Advanced navigation demo
+python bin/scat_baseline.py                  # SCAT baseline generator
+python bin/scat_llm_run.py                   # Real-time SCAT LLM runner
+python bin/verify_llm_communication.py       # LLM connectivity test
+python bin/visualize_conflicts.py            # Conflict visualization tool
+python bin/organize_output_structure.py      # Output organization utility
+```
+
+#### Quick Examples
+
+**Run system health check:**
+```bash
+python cli.py health-check
+```
+
+**Run basic conflict detection demo:**
+```bash
+python cli.py simulate basic --aircraft 3 --duration 15
+```
+
+**Process real aviation data (SCAT files):**
+```bash
+python cli.py scat-llm-run --ownship sample_data/100000.json --realtime
+```
+
+**Generate research metrics:**
+```bash
+python cli.py wolfgang-metrics --input reports/simulation_data.csv
+```
+
+**Run enhanced reporting demo:**
+```bash
+python cli.py enhanced-reporting --flights 5 --intruders 8
+```
+
 ### Basic Simulation
 
 ```python
@@ -1145,29 +1260,37 @@ print(aircraft.json())
 ### Component Architecture
 
 1. **Foundation Layer**
-   - `schemas.py`: Data models and validation
-   - `geodesy.py`: Aviation mathematics
+   - `schemas.py`: Data models, validation, and enhanced reporting structures
+   - `geodesy.py`: Aviation mathematics and navigation calculations
 
 2. **Integration Layer**
-   - `bluesky_io.py`: BlueSky simulator interface
-   - `llm_client.py`: LLM integration via Ollama
+   - `bluesky_io.py`: BlueSky simulator interface with enhanced state management
+   - `llm_client.py`: LLM integration via Ollama with multi-engine support
+   - `nav_utils.py`: Navigation utilities for waypoint resolution and fix lookup
 
 3. **Algorithm Layer**
-   - `detect.py`: Geometric conflict detection
+   - `detect.py`: Geometric conflict detection with trend analysis
    - `resolve.py`: Resolution execution with safety validation
+   - `wolfgang_metrics.py`: Research-standard aviation CDR metrics (Wolfgang 2011)
 
 4. **Orchestration Layer**
-   - `pipeline.py`: Main CDR pipeline with 5-minute cycles
+   - `pipeline.py`: Main CDR pipeline with PromptBuilderV2 and adaptive timing
+   - `simple_stress_test.py`: System stress testing and performance validation
 
 5. **Analysis Layer**
-   - `metrics.py`: Wolfgang (2011) KPIs implementation
-   - `reporting.py`: Comprehensive report generation
+   - `metrics.py`: Basic performance metrics and KPIs
+   - `reporting.py`: Comprehensive report generation with enhanced analytics
+   - `scat_baseline.py`: SCAT baseline traffic analysis and neighbor identification
 
 6. **Data Layer**
-   - `scat_adapter.py`: Real aviation data processing
+   - `scat_adapter.py`: Real aviation data processing and SCAT format support
+   - `asas_integration.py`: ASAS (Airborne Separation Assurance System) integration
 
 7. **API Layer**
-   - `api/service.py`: REST API for system control
+   - `api/service.py`: REST API for system control and monitoring
+
+8. **CLI Layer**
+   - `cli.py`: Unified command-line interface for all system functions
 
 ### Data Flow
 
@@ -1184,6 +1307,61 @@ graph TD
     I --> J[Collect Metrics]
     J --> F
     F --> B
+```
+
+## ⚙️ PromptBuilderV2 Configuration
+
+The enhanced prompt builder provides richer context for LLM decision-making with configurable parameters:
+
+### Core Settings
+
+```python
+# Configuration in schemas.py
+snapshot_interval_min: float = 1.5        # Snapshot frequency (1.0-2.0 minutes)
+max_intruders_in_prompt: int = 5           # Max intruders in LLM context (1-10)
+intruder_proximity_nm: float = 100.0       # Distance filter for relevant intruders
+intruder_altitude_diff_ft: float = 5000.0  # Altitude filter for relevant intruders
+trend_analysis_window_min: float = 2.0     # Rolling window for trend calculation
+```
+
+### Adaptive Timing
+
+- **Normal Operation**: Uses `snapshot_interval_min` (typically 1-2 minutes)
+- **Conflict Escalation**: Increases frequency to minimum 1-minute intervals when conflicts detected
+- **Trend Window**: Maintains 2-minute rolling history for delta calculations
+
+### Multi-Intruder Context
+
+The system automatically:
+1. **Filters** traffic within proximity/altitude constraints (≤100 NM / ±5000 ft)
+2. **Prioritizes** conflicting aircraft over nearby non-conflicting traffic
+3. **Limits** prompt size to `max_intruders_in_prompt` most relevant aircraft
+4. **Calculates** trends for each included aircraft (distance, altitude, speed, heading deltas)
+
+### Enhanced Prompt Features
+
+- **Strict JSON Schema**: Enforced response format with required fields
+- **Example Responses**: Concrete examples for heading and altitude maneuvers
+- **Trend Integration**: 2-minute delta analysis for informed decision-making
+- **Multi-Conflict Resolution**: Single resolution addressing all active conflicts
+
+### Usage Example
+
+```python
+from cdr.pipeline import CDRPipeline, PromptBuilderV2
+from cdr.schemas import ConfigurationSettings
+
+# Configure enhanced prompting
+config = ConfigurationSettings(
+    snapshot_interval_min=1.5,           # Frequent snapshots during conflicts
+    max_intruders_in_prompt=3,           # Focus on 3 most relevant intruders
+    intruder_proximity_nm=50.0,          # Tighter proximity filter
+    trend_analysis_window_min=2.0        # 2-minute trend analysis
+)
+
+# Initialize pipeline with PromptBuilderV2
+pipeline = CDRPipeline(config)
+pipeline.run(ownship_id="OWNSHIP")
 ```
 
 ## 🔌 API Reference
@@ -1338,25 +1516,48 @@ ATC_LLM/
 │   │   └── service.py           # FastAPI application
 │   └── cdr/                     # Core CDR system
 │       ├── __init__.py
-│       ├── schemas.py           # Data models
-│       ├── geodesy.py           # Aviation math
+│       ├── schemas.py           # Data models and enhanced reporting
+│       ├── geodesy.py           # Aviation mathematics
 │       ├── bluesky_io.py        # BlueSky interface
 │       ├── detect.py            # Conflict detection
 │       ├── llm_client.py        # LLM integration
 │       ├── resolve.py           # Resolution execution
-│       ├── pipeline.py          # Main orchestrator
-│       ├── metrics.py           # Performance metrics
+│       ├── pipeline.py          # Main orchestrator with PromptBuilderV2
+│       ├── metrics.py           # Basic performance metrics
+│       ├── wolfgang_metrics.py  # Wolfgang (2011) research metrics
 │       ├── scat_adapter.py      # Real data processing
+│       ├── scat_baseline.py     # SCAT baseline analysis
+│       ├── nav_utils.py         # Navigation utilities
+│       ├── asas_integration.py  # ASAS integration
+│       ├── simple_stress_test.py # System stress testing
 │       └── reporting.py         # Report generation
-├── bin/                         # Simulation scripts
-│   ├── complete_scat_llm_simulation.py
-│   ├── enhanced_scat_llm_simulation.py
-│   └── repo_healthcheck.py
+├── bin/                         # Executable scripts
+│   ├── cli.py                   # Unified CLI interface
+│   ├── complete_llm_demo.py     # Basic LLM demo
+│   ├── complete_scat_llm_simulation.py # Full SCAT+LLM
+│   ├── enhanced_scat_llm_simulation.py # Advanced simulation
+│   ├── scat_baseline.py         # SCAT baseline generator
+│   ├── scat_llm_run.py          # Real-time SCAT LLM runner
+│   ├── verify_llm_communication.py # LLM connectivity test
+│   ├── visualize_conflicts.py   # Conflict visualization
+│   ├── batch_scat_llm_processor.py # Batch processing
+│   ├── production_batch_processor.py # Production runs
+│   ├── demo_baseline_vs_llm.py  # Comparison demo
+│   ├── organize_output_structure.py # Output organization
+│   └── repo_healthcheck.py      # System health check
 ├── tests/                       # Test suite
 │   ├── test_*.py               # Unit tests
-│   └── data/                   # Test data
-├── scenarios/                   # Test scenarios
-├── reports/                     # Generated reports
+│   ├── test_enhanced_reporting.py # Enhanced reporting tests
+│   ├── test_wolfgang_metrics.py # Wolfgang metrics tests
+│   ├── test_nav_utils.py       # Navigation utilities tests
+│   ├── test_prompt_builder_v2.py # Advanced prompt tests
+│   ├── conftest.py             # Test configuration
+│   └── verify_implementation.py # Implementation verification
+├── scenarios/                   # Test scenarios and sample data
+├── reports/                     # Generated reports and analytics
+├── Output/                      # Simulation outputs
+├── baseline_output/             # Baseline comparison data
+├── custom_reports/              # Custom analysis reports
 ├── docs/                       # Documentation
 ├── requirements.txt            # Dependencies
 ├── pyproject.toml             # Project configuration
@@ -1463,23 +1664,56 @@ repos:
 
 | Script | Purpose | Usage |
 |--------|---------|-------|
-| `atc-llm.py` | Main CLI interface | `python bin/atc-llm.py --help` |
+| `cli.py` | Unified CLI interface | `python cli.py --help` |
+| `complete_llm_demo.py` | Basic LLM demonstration | `python bin/complete_llm_demo.py` |
 | `complete_scat_llm_simulation.py` | Full SCAT+LLM integration | `python bin/complete_scat_llm_simulation.py` |
 | `enhanced_scat_llm_simulation.py` | Advanced navigation simulation | `python bin/enhanced_scat_llm_simulation.py` |
-| `batch_scat_llm_processor.py` | Batch processing | `python bin/batch_scat_llm_processor.py` |
-| `repo_healthcheck.py` | System health validation | `python bin/repo_healthcheck.py` |
+| `scat_llm_run.py` | Real-time SCAT LLM runner | `python bin/scat_llm_run.py --ownship <file> --realtime` |
+
+### Analysis and Testing Scripts
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `scat_baseline.py` | SCAT baseline generator | `python bin/scat_baseline.py --root <dir> --ownship <file>` |
+| `wolfgang_metrics.py` | Research-standard metrics | `python src/cdr/wolfgang_metrics.py --input <csv>` |
+| `verify_llm_communication.py` | LLM connectivity test | `python bin/verify_llm_communication.py` |
+| `visualize_conflicts.py` | Conflict visualization | `python bin/visualize_conflicts.py --input <data>` |
+| `repo_healthcheck.py` | System health validation | `python bin/repo_healthcheck.py --verbose` |
+
+### Batch Processing Scripts
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `batch_scat_llm_processor.py` | Batch SCAT processing | `python bin/batch_scat_llm_processor.py` |
+| `production_batch_processor.py` | Production batch runs | `python bin/production_batch_processor.py` |
+| `demo_baseline_vs_llm.py` | Baseline vs LLM comparison | `python bin/demo_baseline_vs_llm.py` |
+
+### Utility Scripts
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `organize_output_structure.py` | Output organization | `python bin/organize_output_structure.py` |
 
 ### Example Script Usage
 
 ```bash
-# Run comprehensive SCAT simulation
-python bin/complete_scat_llm_simulation.py
+# Run comprehensive SCAT simulation with real-time visualization
+python bin/scat_llm_run.py --ownship sample_data/100000.json --realtime --dt-min 1
 
-# Run health check
-python bin/repo_healthcheck.py --verbose
+# Generate SCAT baseline for traffic analysis
+python bin/scat_baseline.py --root sample_data/ --ownship 100000.json --radius 100nm
 
-# Run enhanced simulation with custom parameters
-python bin/enhanced_scat_llm_simulation.py --cycles 30 --enable-llm
+# Run Wolfgang (2011) metrics analysis
+python cli.py wolfgang-metrics --input reports/simulation_results.csv
+
+# Verify LLM connectivity and performance
+python bin/verify_llm_communication.py --model llama3.1:8b
+
+# Run health check with comprehensive diagnostics
+python bin/repo_healthcheck.py --verbose --check-all
+
+# Enhanced simulation with custom parameters
+python bin/enhanced_scat_llm_simulation.py --cycles 30 --enable-llm --aircraft 5
 ```
 
 ## 📊 Performance Metrics
@@ -1604,7 +1838,157 @@ python bin/complete_scat_llm_simulation.py
 3. **Check Issues**: Look for similar problems in GitHub issues
 4. **Create Issue**: Provide logs, environment details, and reproduction steps
 
-## 📄 License
+## 📊 Dependency Matrix
+
+For a comprehensive analysis of all system dependencies, module relationships, and external library usage, see **[DEPENDENCY_MATRIX.md](DEPENDENCY_MATRIX.md)**.
+
+**Quick Reference:**
+- **Core Dependencies**: numpy, pandas, pydantic, bluesky-simulator
+- **LLM Integration**: requests (Ollama), torch, transformers (optional)
+- **Testing**: pytest, pytest-cov, mock
+- **Development**: black, ruff, mypy
+- **Visualization**: matplotlib, seaborn, rich
+
+**System Architecture:**
+- 50+ modules and scripts
+- 25+ external libraries
+- Comprehensive test coverage
+- Well-defined module interfaces
+- Clear separation of concerns
+
+## � Comprehensive Dependency Matrix
+
+### Core System Dependencies
+
+| Component | Dependencies | Purpose | Status |
+|-----------|-------------|---------|---------|
+| **Foundation** | | | |
+| `schemas.py` | `pydantic`, `datetime`, `enum` | Data validation and models | ✅ Active |
+| `geodesy.py` | `numpy`, `math` | Aviation mathematics | ✅ Active |
+| **Integration** | | | |
+| `bluesky_io.py` | `bluesky-simulator`, `telnetlib`, `threading` | BlueSky interface | ✅ Active |
+| `llm_client.py` | `requests`, `json`, `typing` | LLM integration | ✅ Active |
+| `nav_utils.py` | `bluesky.navdatabase`, `geodesy` | Navigation utilities | ✅ New |
+| **Algorithms** | | | |
+| `detect.py` | `numpy`, `geodesy`, `schemas` | Conflict detection | ✅ Active |
+| `resolve.py` | `schemas`, `geodesy`, `nav_utils` | Resolution execution | ✅ Enhanced |
+| `wolfgang_metrics.py` | `pandas`, `numpy`, `scipy` | Research metrics | ✅ New |
+| **Orchestration** | | | |
+| `pipeline.py` | All core modules + `PromptBuilderV2` | Main CDR pipeline | ✅ Enhanced |
+| `simple_stress_test.py` | `numpy`, `random`, `schemas` | Stress testing | ✅ New |
+| **Analysis** | | | |
+| `metrics.py` | `numpy`, `pandas`, `schemas` | Basic metrics | ✅ Active |
+| `reporting.py` | `pandas`, `matplotlib`, `json` | Report generation | ✅ Enhanced |
+| `scat_baseline.py` | `scipy`, `numpy`, `geojson` | SCAT baseline analysis | ✅ New |
+| **Data Processing** | | | |
+| `scat_adapter.py` | `json`, `datetime`, `pathlib` | SCAT data processing | ✅ Active |
+| `asas_integration.py` | Core CDR modules | ASAS integration | ✅ New |
+
+### Script Dependencies
+
+| Script | Core Dependencies | External Libraries | Purpose |
+|--------|------------------|-------------------|---------|
+| **CLI Interface** | | | |
+| `cli.py` | All `src.cdr` modules | `argparse`, `logging` | Unified interface |
+| **Simulation Scripts** | | | |
+| `complete_llm_demo.py` | Core CDR pipeline | `time`, `json` | Basic demonstration |
+| `complete_scat_llm_simulation.py` | Full CDR + SCAT | `math`, `dataclasses` | SCAT+LLM integration |
+| `enhanced_scat_llm_simulation.py` | Core CDR + nav utils | `datetime`, `typing` | Advanced navigation |
+| `scat_llm_run.py` | SCAT + LLM + BlueSky | `time`, `pathlib` | Real-time runner |
+| **Analysis Scripts** | | | |
+| `scat_baseline.py` | SCAT adapter + geodesy | `csv`, `geojson` | Baseline generator |
+| `verify_llm_communication.py` | LLM client | `traceback`, `os` | LLM testing |
+| `visualize_conflicts.py` | Metrics + reporting | `matplotlib`, `seaborn` | Visualization |
+| **Batch Processing** | | | |
+| `batch_scat_llm_processor.py` | Full pipeline | `multiprocessing` | Batch processing |
+| `production_batch_processor.py` | Core CDR + metrics | `concurrent.futures` | Production runs |
+| `demo_baseline_vs_llm.py` | Pipeline + comparison | `statistics` | Comparison demo |
+
+### Test Dependencies
+
+| Test Module | System Under Test | Test Dependencies |
+|-------------|------------------|------------------|
+| `test_enhanced_reporting.py` | Enhanced reporting system | `unittest`, `tempfile` |
+| `test_wolfgang_metrics.py` | Wolfgang metrics calculator | `pytest`, `numpy`, `pandas` |
+| `test_nav_utils.py` | Navigation utilities | `pytest`, `mock` |
+| `test_prompt_builder_v2.py` | Advanced prompt builder | `pytest`, `datetime` |
+| `test_asas_integration.py` | ASAS integration | `pytest`, `mock` |
+| `test_*_comprehensive.py` | Full integration tests | `pytest`, `fixtures` |
+
+### External Library Matrix
+
+| Library | Version | Usage | Components |
+|---------|---------|-------|------------|
+| **Core Scientific** | | | |
+| `numpy` | ≥1.26.0 | Numerical computations | geodesy, detect, wolfgang_metrics |
+| `pandas` | 2.0.3 | Data analysis | wolfgang_metrics, reporting, analysis scripts |
+| `scipy` | 1.11.1 | Spatial operations | scat_baseline, advanced metrics |
+| **Data Validation** | | | |
+| `pydantic` | 2.11.7 | Data models | schemas, API validation |
+| **Aviation Simulation** | | | |
+| `bluesky-simulator` | latest | Flight simulation | bluesky_io, navigation |
+| **LLM Integration** | | | |
+| `requests` | built-in | HTTP communication | llm_client, API calls |
+| `torch` | 2.0.1 | ML operations | LLM processing (optional) |
+| `transformers` | 4.31.0 | Model handling | LLM integration (optional) |
+| **Web Framework** | | | |
+| `fastapi` | 0.100.1 | REST API | api/service.py |
+| `uvicorn` | 0.22.0 | ASGI server | API deployment |
+| **Testing** | | | |
+| `pytest` | 7.4.0 | Test framework | All test modules |
+| `pytest-cov` | 4.1.0 | Coverage analysis | Test reporting |
+| **Visualization** | | | |
+| `matplotlib` | 3.7.2 | Plotting | reporting, visualization scripts |
+| `seaborn` | 0.12.2 | Statistical plots | Advanced visualizations |
+| **Development** | | | |
+| `black` | 23.7.0 | Code formatting | Development workflow |
+| `ruff` | 0.0.280 | Linting | Code quality |
+| `mypy` | 1.4.1 | Type checking | Static analysis |
+
+### Dependency Flow Diagram
+
+```mermaid
+graph TD
+    A[CLI Interface] --> B[Core CDR Pipeline]
+    B --> C[BlueSky Simulator]
+    B --> D[LLM Client]
+    B --> E[SCAT Data Adapter]
+    
+    F[Navigation Utils] --> B
+    G[Wolfgang Metrics] --> H[Reporting System]
+    B --> H
+    
+    I[Enhanced Reporting] --> H
+    J[SCAT Baseline] --> E
+    K[Stress Testing] --> B
+    
+    L[Test Suite] --> A
+    L --> B
+    L --> F
+    L --> G
+    
+    M[External Libraries] --> N[numpy/pandas/scipy]
+    M --> O[bluesky-simulator]
+    M --> P[pydantic/fastapi]
+    M --> Q[pytest/development tools]
+    
+    N --> B
+    N --> G
+    O --> C
+    P --> A
+    P --> I
+    Q --> L
+```
+
+### Module Interdependency Summary
+
+- **High Coupling**: Core pipeline integrates with all major components
+- **Loose Coupling**: Utility modules (nav_utils, wolfgang_metrics) are self-contained
+- **Test Coverage**: Comprehensive test suite covers all major functionality
+- **External Dependencies**: Well-managed with clear version requirements
+- **Development Tools**: Full suite of code quality and testing tools
+
+## �📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 

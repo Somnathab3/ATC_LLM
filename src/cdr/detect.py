@@ -80,26 +80,29 @@ def predict_conflicts(
         # Compute CPA
         dmin_nm, tmin_min = cpa_nm(own_dict, intr_dict)
         
-        # Check conflict criteria
+        # Check conflict criteria (assume level flight for alt)
         future_alt_diff = abs(own_dict["alt_ft"] - intr_dict["alt_ft"])  # Assuming level flight
-        
+
         # Skip if time to CPA is negative (aircraft diverging)
         if tmin_min <= 0:
             continue
-            
-        is_conflict_detected = is_conflict(dmin_nm, future_alt_diff, tmin_min)
-        
-        if is_conflict_detected and tmin_min <= lookahead_minutes:
+
+        horizontal_violation = dmin_nm < MIN_HORIZONTAL_SEP_NM
+        vertical_violation = future_alt_diff < MIN_VERTICAL_SEP_FT
+
+        # Flag as conflict if either standard is violated within lookahead
+        if (horizontal_violation or vertical_violation) and tmin_min <= lookahead_minutes:
             # Calculate severity score based on proximity and time
             severity = calculate_severity_score(dmin_nm, future_alt_diff, tmin_min)
-            
-            # Determine conflict type
-            conflict_type = "both"
-            if dmin_nm >= MIN_HORIZONTAL_SEP_NM:
-                conflict_type = "vertical"
-            elif future_alt_diff >= MIN_VERTICAL_SEP_FT:
+
+            # Determine conflict type based on which standards are violated
+            if horizontal_violation and vertical_violation:
+                conflict_type = "both"
+            elif horizontal_violation:
                 conflict_type = "horizontal"
-                
+            else:
+                conflict_type = "vertical"
+
             conflict = ConflictPrediction(
                 ownship_id=ownship.aircraft_id,
                 intruder_id=intruder.aircraft_id,
@@ -144,12 +147,12 @@ def is_conflict(
     # If both horizontal and vertical minima exceed thresholds, no conflict
     if distance_nm >= MIN_HORIZONTAL_SEP_NM and abs(altitude_diff_ft) >= MIN_VERTICAL_SEP_FT:
         return False
-        
+
     # Check separation standards
     horizontal_violation = distance_nm < MIN_HORIZONTAL_SEP_NM
     vertical_violation = abs(altitude_diff_ft) < MIN_VERTICAL_SEP_FT
-    
-    # Conflict requires both standards to be violated
+
+    # Core definition: conflict requires both standards to be violated simultaneously
     return horizontal_violation and vertical_violation
 
 

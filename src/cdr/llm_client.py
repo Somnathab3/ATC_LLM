@@ -13,9 +13,18 @@ import re
 import json
 import logging
 import subprocess
-import requests
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
+from types import SimpleNamespace
+
+# Import guard for requests - use lazy import to prevent test failures
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    requests = None
+    REQUESTS_AVAILABLE = False
+    logging.warning("requests not available - using mock mode")
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +197,7 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
         return self._build_simple_resolve_prompt(detect_out, config)
     
     def _build_simple_resolve_prompt(self, detect_out: Dict[str, Any], config: Union[Dict[str, Any], Any]) -> str:
-        """Simple resolution prompt for backward compatibility"""
+        """Simple resolution prompt with updated parameter names for current parsing logic"""
         # Handle both dict and Pydantic object configs
         if hasattr(config, 'max_resolution_angle_deg'):
             max_angle = config.max_resolution_angle_deg
@@ -197,29 +206,57 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
         else:
             max_angle = 30
             
+        # Extract ownship current heading for smarter resolution
+        ownship_heading = 0
+        if 'ownship' in detect_out:
+            ownship_heading = detect_out['ownship'].get('hdg_deg', 0)
+            
         return (
-            "You are an ATC conflict resolver. "
-            "Given a detected conflict, return strict JSON:\\n"
-            '{"action":"turn|climb|descend","params":{},"ratio":0.0,"reason":"<text>"}\\n'
+            "You are an expert ATC conflict resolver. "
+            f"Given a detected conflict, provide a resolution to avoid collision.\\n"
+            f"Ownship current heading: {ownship_heading:.0f}°\\n"
+            f"Available resolutions: turn (±{max_angle}° max), climb/descend (±2000ft max)\\n"
+            "Return strict JSON:\\n"
+            '{"action":"turn|climb|descend","params":{"heading_deg":float|"direction":"left|right","degrees":float|"altitude_change_ft":float},"ratio":0.0,"reason":"<text>"}\\n'
             f"Detection: {json.dumps(detect_out)}\\n"
-            f"Constraints: {json.dumps({'max_resolution_angle_deg': max_angle})}\\n"
+            "For turn: provide NEW heading_deg (not current) OR direction+degrees for relative turn\\n"
+            "For climb: provide positive altitude_change_ft\\n"
+            "For descend: provide negative altitude_change_ft\\n"
+            "Choose the most effective resolution for immediate separation.\\n"
             "Only JSON. No extra text."
         )
     
     def build_enhanced_resolve_prompt(self, ownship, conflicts: List, config) -> str:
         """Build standardized conflict resolution prompt based on aviation best practices."""
         from .schemas import AircraftState, ConflictPrediction, ConfigurationSettings
+        from .nav_utils import nearest_fixes
         
         # Handle mixed input types
         if hasattr(config, 'max_resolution_angle_deg'):
             max_angle = config.max_resolution_angle_deg
             max_alt_change = getattr(config, 'max_altitude_change_ft', 2000)
+            max_waypoint_diversion = getattr(config, 'max_waypoint_diversion_nm', 80.0)
         elif isinstance(config, dict):
             max_angle = config.get('max_resolution_angle_deg', 30)
             max_alt_change = config.get('max_altitude_change_ft', 2000)
+            max_waypoint_diversion = config.get('max_waypoint_diversion_nm', 80.0)
         else:
             max_angle = 30
             max_alt_change = 2000
+            max_waypoint_diversion = 80.0
+        
+        # Get ownship position for waypoint suggestions
+        if hasattr(ownship, 'latitude'):
+            ownship_lat, ownship_lon = ownship.latitude, ownship.longitude
+        elif isinstance(ownship, dict):
+            ownship_lat = ownship.get('lat', ownship.get('latitude', 0.0))
+            ownship_lon = ownship.get('lon', ownship.get('longitude', 0.0))
+        else:
+            ownship_lat, ownship_lon = 0.0, 0.0
+        
+        # Get nearby waypoint suggestions to reduce hallucination
+        suggestions = nearest_fixes(ownship_lat, ownship_lon, k=3, max_dist_nm=max_waypoint_diversion)
+        suggest_txt = "\n".join([f"- {f['name']} ({f['dist_nm']:.1f} NM)" for f in suggestions]) or "- (none nearby)"
         
         # Format conflicts for clear understanding
         conflicts_info = []
@@ -263,29 +300,33 @@ RESOLUTION TYPES:
 1. HEADING_CHANGE: Turn left or right by specified degrees
 2. ALTITUDE_CHANGE: Climb or descend to specified flight level
 3. SPEED_CHANGE: Adjust speed within aircraft performance limits
-4. DIRECT_TO_WAYPOINT: Navigate direct to specified waypoint (if available)
+4. WAYPOINT_DIRECT: Navigate direct to specified waypoint (if available)
+
+WAYPOINT DIRECT OPTION:
+- You may instruct ownship to go DIRECT to a named fix within {max_waypoint_diversion} NM.
+- Nearby fixes you may choose (prefer these to avoid hallucination):
+{suggest_txt}
 
 OUTPUT FORMAT (JSON only, no additional text):
 {{
-    "action": "HEADING_CHANGE|ALTITUDE_CHANGE|SPEED_CHANGE|DIRECT_TO_WAYPOINT",
+    "action": "turn|climb|descend|waypoint",
     "params": {{
-        "new_heading_deg": float,     // For HEADING_CHANGE
-        "heading_delta_deg": float,   // Relative change amount
+        "heading_deg": float,         // For turn: new absolute heading (0-359)
+        "heading_delta_deg": float,   // Alternative: relative change amount
         "turn_direction": "left|right", // Turn direction
-        "new_altitude_ft": float,     // For ALTITUDE_CHANGE  
-        "altitude_delta_ft": float,   // Relative change amount
-        "climb_descend": "climb|descend", // Vertical direction
-        "new_speed_kt": float,        // For SPEED_CHANGE
-        "speed_delta_kt": float,      // Relative change amount
-        "waypoint_name": "string"     // For DIRECT_TO_WAYPOINT
+        "new_altitude_ft": float,     // For climb/descend: new absolute altitude
+        "altitude_change_ft": float,  // Alternative: relative change amount
+        "delta_ft": float,            // Alternative: relative change amount
+        "new_speed_kt": float,        // For speed change: new absolute speed
+        "speed_delta_kt": float,      // Alternative: relative change amount
+        "waypoint_name": "string"     // For waypoint: name of target fix (REQUIRED if action == "waypoint")
     }},
-    "bluesky_command": "exact BlueSky command string",
-    "rationale": "Clear explanation of resolution strategy",
-    "expected_separation_improvement": float,  // Expected improvement in NM
-    "estimated_delay_min": float,             // Estimated delay to destination
-    "confidence": float,                      // Confidence in resolution (0-1)
-    "backup_actions": ["alternative action if primary fails"]
+    "reason": "Clear explanation of resolution strategy"
 }}
+
+EXAMPLES:
+Heading change: {{"action": "turn", "params": {{"heading_deg": 270}}, "reason": "Turn left 30° to avoid traffic"}}
+Waypoint direct: {{"action": "waypoint", "params": {{"waypoint_name": "BOKSU"}}, "reason": "Direct to BOKSU for efficient separation"}}
 
 CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
 
@@ -315,7 +356,7 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
 
     # ---------- JSON EXTRACTION ----------
     def extract_json_from_text(self, text: str) -> Dict[str, Any]:
-        """Enhanced JSON extraction with fallback patterns"""
+        """Enhanced JSON extraction with fallback patterns and math expression handling"""
         # Try multiple extraction patterns
         patterns = [
             r"\{.*\}",                    # Standard JSON block
@@ -328,6 +369,25 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
                 match = re.search(pattern, text, flags=re.DOTALL)
                 if match:
                     json_text = match.group(1) if match.groups() else match.group(0)
+                    
+                    # Try to handle mathematical expressions in JSON
+                    try:
+                        # Replace simple mathematical expressions with computed values
+                        def eval_math(match):
+                            expr = match.group(1)
+                            try:
+                                # Only allow safe mathematical operations
+                                if all(c in '0123456789+-*/ ().' for c in expr):
+                                    return str(eval(expr))
+                                return expr
+                            except:
+                                return expr
+                        
+                        # Replace patterns like "35000 + 500" with computed values
+                        json_text = re.sub(r':\s*([0-9+\-*/ ()\.]+)(?=\s*[,}])', lambda m: f": {eval_math(m)}", json_text)
+                    except:
+                        pass  # Continue with original text if pattern replacement fails
+                    
                     return json.loads(json_text)
             except (json.JSONDecodeError, AttributeError):
                 continue
@@ -343,6 +403,18 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
         On any error, return {} and let caller fallback to mock.
         """
         try:
+            logger.debug("=== LLM DEBUG: Sending prompt to Ollama ===")
+            logger.debug(f"Prompt length: {len(prompt)} characters")
+            logger.debug(f"Prompt preview (first 200 chars): {prompt[:200]}...")
+            
+            # Check if requests is available and not disabled
+            if not REQUESTS_AVAILABLE or os.environ.get("LLM_DISABLED") == "1":
+                logger.info("LLM disabled for testing - returning mock response")
+                return {
+                    "response": "HDG TEST123 120\nReason: Mock resolution for testing",
+                    "reasoning": "Mock LLM response for isolated testing"
+                }
+            
             resp = requests.post(
                 f"{self.host}/api/generate",
                 json={"model": self.model_name, "prompt": prompt, "stream": False},
@@ -354,7 +426,18 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
             data = resp.json()
             # typical response has 'response' field with the text
             txt = data.get("response", "") if isinstance(data, dict) else ""
-            return self.extract_json_from_text(txt)
+            
+            logger.debug("=== LLM DEBUG: Raw Ollama response ===")
+            logger.debug(f"Response length: {len(txt)} characters")
+            logger.debug(f"Raw response: {txt}")
+            logger.debug("=== End raw response ===")
+            
+            extracted_json = self.extract_json_from_text(txt)
+            logger.debug(f"=== LLM DEBUG: Extracted JSON ===")
+            logger.debug(f"Extracted: {json.dumps(extracted_json, indent=2)}")
+            logger.debug("=== End extracted JSON ===")
+            
+            return extracted_json
         except requests.RequestException as e:
             logger.warning("Ollama call failed: %s", e)
             return {}
@@ -376,6 +459,10 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
             pass
         # HTTP fallback
         try:
+            # Check if requests is available and not disabled
+            if not REQUESTS_AVAILABLE or os.environ.get("LLM_DISABLED") == "1":
+                return '{"conflict": false, "mock": true}'
+                
             resp = requests.post(
                 f"{self.host}/api/generate",
                 json={"model": self.model_name, "prompt": prompt, "stream": False},
@@ -576,6 +663,121 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
                 for k, v in kwargs.items():
                     setattr(self, k, v)
         return MockResult(**kwargs)
+    
+    def resolve_conflict(self, conflict, current_states, config):
+        """Wrapper method for conflict resolution to maintain API compatibility.
+        
+        Args:
+            conflict: ConflictPrediction object with conflict details
+            current_states: List of current aircraft states
+            config: Configuration settings
+            
+        Returns:
+            Resolution object with action, params, and target_aircraft attributes
+        """
+        try:
+            # Find ownship in current_states
+            ownship_state = None
+            for state in current_states:
+                if hasattr(state, 'aircraft_id') and state.aircraft_id == conflict.ownship_id:
+                    ownship_state = state
+                    break
+            
+            if ownship_state is None:
+                logger.error(f"Ownship {conflict.ownship_id} not found in current_states")
+                raise ValueError(f"Ownship {conflict.ownship_id} not found in current_states")
+            
+            # Find intruder in current_states  
+            intruder_state = None
+            for state in current_states:
+                if hasattr(state, 'aircraft_id') and state.aircraft_id == conflict.intruder_id:
+                    intruder_state = state
+                    break
+            
+            # Build detection output format for LLM
+            detect_out = {
+                "ownship": {
+                    "aircraft_id": ownship_state.aircraft_id,
+                    "lat": float(ownship_state.latitude),
+                    "lon": float(ownship_state.longitude),
+                    "alt_ft": float(ownship_state.altitude_ft),
+                    "hdg_deg": float(ownship_state.heading_deg),
+                    "spd_kt": float(ownship_state.ground_speed_kt)
+                },
+                "conflicts": [{
+                    "intruder_id": conflict.intruder_id,
+                    "time_to_cpa_min": float(conflict.time_to_cpa_min),
+                    "distance_at_cpa_nm": float(conflict.distance_at_cpa_nm),
+                    "altitude_diff_ft": float(abs(conflict.altitude_diff_ft)),
+                    "severity": float(getattr(conflict, "severity_score", 1.0)),
+                    "conflict_type": getattr(conflict, "conflict_type", "both")
+                }]
+            }
+            
+            # Build config for LLM
+            cfg = {
+                "max_resolution_angle_deg": getattr(config, "max_resolution_angle_deg", 30),
+                "max_altitude_change_ft": getattr(config, "max_altitude_change_ft", 2000),
+                "min_horizontal_separation_nm": getattr(config, "min_horizontal_separation_nm", 5.0),
+                "min_vertical_separation_ft": getattr(config, "min_vertical_separation_ft", 1000.0)
+            }
+            
+            # Call existing generate_resolution method
+            logger.debug("=== LLM DEBUG: Calling generate_resolution ===")
+            logger.debug(f"Detection data: {json.dumps(detect_out, indent=2)}")
+            logger.debug(f"Config: {json.dumps(cfg, indent=2)}")
+            
+            resolution_result = self.generate_resolution(detect_out, cfg, use_enhanced=True)
+            
+            logger.debug("=== LLM DEBUG: Resolution result ===")
+            logger.debug(f"Result type: {type(resolution_result)}")
+            logger.debug(f"Result: {resolution_result}")
+            if hasattr(resolution_result, '__dict__'):
+                logger.debug(f"Result attributes: {resolution_result.__dict__}")
+            logger.debug("=== End resolution result ===")
+            
+            # Normalize output to expected format
+            if hasattr(resolution_result, 'action'):
+                action = resolution_result.action
+                params = getattr(resolution_result, 'params', {})
+            elif isinstance(resolution_result, dict):
+                action = resolution_result.get("action", "HEADING_CHANGE")
+                params = resolution_result.get("params", {})
+            else:
+                # Fallback to safe defaults
+                action = "HEADING_CHANGE"
+                params = {"heading_delta_deg": 20, "turn_direction": "right"}
+            
+            # Create response object that matches expected interface
+            result = SimpleNamespace(
+                action=action,
+                params=params,
+                target_aircraft=ownship_state.aircraft_id,
+                resolution_type=action,  # For backward compatibility
+                new_heading_deg=params.get("new_heading_deg"),
+                new_altitude_ft=params.get("new_altitude_ft"),
+                new_speed_kt=params.get("new_speed_kt"),
+                rationale=getattr(resolution_result, 'rationale', 'LLM-generated resolution'),
+                is_validated=False
+            )
+            
+            logger.info(f"Generated resolution for conflict {conflict.ownship_id} vs {conflict.intruder_id}: {action}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in resolve_conflict: {e}")
+            # Return a safe fallback resolution
+            return SimpleNamespace(
+                action="HEADING_CHANGE",
+                params={"heading_delta_deg": 20, "turn_direction": "right"},
+                target_aircraft=getattr(conflict, 'ownship_id', 'UNKNOWN'),
+                resolution_type="HEADING_CHANGE",
+                new_heading_deg=None,
+                new_altitude_ft=None,
+                new_speed_kt=None,
+                rationale="Fallback resolution due to error",
+                is_validated=False
+            )
 
     # ---------- PARSERS (normalize dicts/strings) ----------
     def parse_detect_response(self, obj: Any) -> Dict[str, Any]:
@@ -974,6 +1176,10 @@ CRITICAL: Return only valid JSON."""
     # Legacy _post method for tests
     def _post(self, prompt: str) -> str:
         """Legacy HTTP post method for backwards compatibility."""
+        # Check if requests is available and not disabled
+        if not REQUESTS_AVAILABLE or os.environ.get("LLM_DISABLED") == "1":
+            return '{"response": "HDG TEST123 120", "mock": true}'
+            
         payload = {
             "model": self.model_name,
             "prompt": prompt,

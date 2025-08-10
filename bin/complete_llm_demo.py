@@ -86,9 +86,9 @@ class CompleteLLMDemo:
             return {"success": False, "error": str(e)}
     
     def step1_scat_to_bluesky(self, scat_file: str) -> Dict[str, Any]:
-        """STEP 1: Load SCAT data and convert to BlueSky format."""
+        """STEP 1: Load SCAT data and create aircraft in BlueSky with route following."""
         print("\n" + "="*60)
-        print("STEP 1: SCAT TO BLUESKY")
+        print("STEP 1: SCAT TO BLUESKY WITH ROUTE FOLLOWING")
         print("="*60)
         
         try:
@@ -110,29 +110,88 @@ class CompleteLLMDemo:
             callsign = aircraft_info.get("callsign", "UNKNOWN")
             aircraft_type = aircraft_info.get("aircraft_type", "UNKNOWN")
             
-            # Get latest position
-            latest_plot = plots[-1]
-            position = latest_plot.get("I062/105", {})
-            altitude_data = latest_plot.get("I062/136", {})
-            velocity = latest_plot.get("I062/185", {})
+            # Build route from all plot points
+            route = []
+            for plot in plots:
+                position = plot.get("I062/105", {})
+                lat = position.get("lat")
+                lon = position.get("lon")
+                if lat is not None and lon is not None:
+                    route.append((lat, lon))
             
-            # Convert to BlueSky format
+            if len(route) < 2:
+                return {"success": False, "error": "Insufficient route points"}
+            
+            # Initialize BlueSky if not already done
+            if not hasattr(self, 'bluesky_client'):
+                from src.cdr.bluesky_io import BlueSkyClient, BSConfig
+                bs_config = BSConfig()
+                self.bluesky_client = BlueSkyClient(bs_config)
+                
+                if not self.bluesky_client.connect():
+                    return {"success": False, "error": "Failed to connect to BlueSky"}
+                
+                # Reset and configure simulation
+                self.bluesky_client.sim_reset()
+                self.bluesky_client.sim_realtime(False)  # Fast simulation
+                self.bluesky_client.sim_set_dtmult(60.0)  # 60x speed
+            
+            # Get initial position and heading
+            lat0, lon0 = route[0]
+            from src.cdr.geodesy import bearing_deg
+            if len(route) > 1:
+                hdg0 = bearing_deg(lat0, lon0, route[1][0], route[1][1])
+            else:
+                hdg0 = 90.0  # Default heading
+            
+            # Get altitude from latest plot
+            latest_plot = plots[-1]
+            altitude_data = latest_plot.get("I062/136", {})
+            altitude_ft = altitude_data.get("measured_flight_level", 350) * 100  # FL to feet
+            
+            # Create aircraft in BlueSky
+            success = self.bluesky_client.create_aircraft(
+                callsign, aircraft_type, lat0, lon0, hdg0, altitude_ft, 420.0
+            )
+            
+            if not success:
+                return {"success": False, "error": f"Failed to create aircraft {callsign}"}
+            
+            # Add route waypoints for autopilot following
+            # Sample route to avoid too many waypoints (every 10th point)
+            sampled_route = route[::10] + [route[-1]]  # Include final point
+            
+            # Add waypoints to BlueSky
+            waypoints_added = self.bluesky_client.add_waypoints_from_route(
+                callsign, sampled_route[1:], altitude_ft
+            )
+            
+            if not waypoints_added:
+                self.log_debug("Warning: Failed to add some waypoints")
+            
+            # Let BlueSky process the aircraft creation and waypoints
+            self.bluesky_client.step_minutes(0.5)
+            
+            # Create result with route information
             bluesky_aircraft = {
                 "callsign": callsign,
                 "aircraft_type": aircraft_type,
-                "latitude": position.get("lat", 0),
-                "longitude": position.get("lon", 0),
-                "altitude_ft": altitude_data.get("measured_flight_level", 0) * 100,
-                "velocity_x": velocity.get("vx", 0),
-                "velocity_y": velocity.get("vy", 0),
-                "timestamp": latest_plot.get("time_of_track", "")
+                "latitude": lat0,
+                "longitude": lon0,
+                "altitude_ft": altitude_ft,
+                "heading_deg": hdg0,
+                "route_waypoints": len(sampled_route),
+                "total_route_points": len(route),
+                "autopilot_engaged": True
             }
             
-            self.log_debug(f"Successfully converted SCAT data for {callsign}")
+            self.log_debug(f"Successfully created {callsign} with {len(sampled_route)} waypoints")
             print(f"Aircraft: {callsign} ({aircraft_type})")
-            print(f"Position: {bluesky_aircraft['latitude']:.4f}N, {bluesky_aircraft['longitude']:.4f}E")
-            print(f"Altitude: {bluesky_aircraft['altitude_ft']:.0f} ft")
-            print(f"Velocity: Vx={bluesky_aircraft['velocity_x']}, Vy={bluesky_aircraft['velocity_y']}")
+            print(f"Initial position: {lat0:.4f}N, {lon0:.4f}E")
+            print(f"Initial altitude: {altitude_ft:.0f} ft")
+            print(f"Initial heading: {hdg0:.1f} degrees")
+            print(f"Route waypoints: {len(sampled_route)} (from {len(route)} total points)")
+            print(f"Autopilot: ENGAGED - following SCAT route")
             
             return {"success": True, "aircraft": bluesky_aircraft}
             
@@ -141,29 +200,39 @@ class CompleteLLMDemo:
             return {"success": False, "error": str(e)}
     
     def step2_bluesky_to_llm(self, aircraft_data: Dict[str, Any], iteration: int = 1) -> Dict[str, Any]:
-        """STEP 2: Send BlueSky data to LLM for analysis."""
+        """STEP 2: Get current BlueSky state and send to LLM for analysis."""
         print("\n" + "="*60)
-        print(f"STEP 2: BLUESKY TO LLM (Iteration {iteration})")
+        print(f"STEP 2: BLUESKY STATE TO LLM (Iteration {iteration})")
         print("="*60)
         
-        # Create detailed aviation prompt
+        # Get current aircraft state from BlueSky
+        current_states = self.bluesky_client.get_aircraft_states()
+        callsign = aircraft_data['callsign']
+        
+        if callsign not in current_states:
+            return {"success": False, "error": f"Aircraft {callsign} not found in BlueSky"}
+        
+        current_state = current_states[callsign]
+        
+        # Create detailed aviation prompt with real BlueSky data
         prompt = f"""You are an expert Air Traffic Controller with ICAO certification analyzing real flight data.
 
-CURRENT AIRCRAFT STATE:
-- Callsign: {aircraft_data['callsign']}
+CURRENT AIRCRAFT STATE (from BlueSky simulation):
+- Callsign: {callsign}
 - Aircraft Type: {aircraft_data['aircraft_type']}
-- Position: {aircraft_data['latitude']:.4f}N {aircraft_data['longitude']:.4f}E
-- Altitude: {aircraft_data['altitude_ft']:.0f} feet
-- Current Heading: {aircraft_data.get('heading', 90)} degrees
-- Ground Speed: 450 knots
-- Velocity Vector: Vx={aircraft_data['velocity_x']}, Vy={aircraft_data['velocity_y']}
+- Position: {current_state['lat']:.4f}N {current_state['lon']:.4f}E
+- Altitude: {current_state['alt_ft']:.0f} feet
+- Current Heading: {current_state['hdg_deg']:.1f} degrees
+- Ground Speed: {current_state['spd_kt']:.1f} knots
+- Vertical Speed: {current_state.get('vs_fpm', 0):.0f} fpm
+- Route Following: {"ACTIVE" if aircraft_data.get('autopilot_engaged') else "INACTIVE"}
 
 ITERATION: {iteration}
 
 ANALYSIS TASKS:
-1. Assess current flight path and efficiency
+1. Assess current flight path efficiency and route adherence
 2. Check for potential optimization opportunities
-3. Generate a course correction if beneficial
+3. Evaluate if manual intervention is needed
 4. Provide BlueSky command for any recommended changes
 
 AVIATION STANDARDS:
@@ -171,13 +240,15 @@ AVIATION STANDARDS:
 - Consider fuel efficiency and flight time
 - Maintain safe altitudes and headings
 - Follow ICAO flight rules
+- Respect autopilot route following when active
 
 OUTPUT FORMAT (JSON only):
 {{
     "iteration": {iteration},
     "current_assessment": "detailed analysis of current flight state",
+    "route_adherence": "good|acceptable|poor",
     "optimization_needed": true/false,
-    "recommended_action": "none|heading_change|altitude_change|speed_change",
+    "recommended_action": "none|heading_change|altitude_change|speed_change|direct_waypoint",
     "new_heading": 0,
     "new_altitude": 0,
     "new_speed": 0,
@@ -188,18 +259,26 @@ OUTPUT FORMAT (JSON only):
     "confidence": 0.8
 }}"""
 
-        self.log_debug(f"Analyzing aircraft {aircraft_data['callsign']} with LLM")
+        self.log_debug(f"Analyzing real BlueSky state for {callsign}")
         
         result = self.call_llm(prompt)
         
         if result["success"]:
             analysis = result["data"]
-            print(f"LLM Analysis for {aircraft_data['callsign']}:")
+            print(f"LLM Analysis for {callsign} (real BlueSky data):")
+            print(f"  Current position: {current_state['lat']:.4f}N, {current_state['lon']:.4f}E")
+            print(f"  Current altitude: {current_state['alt_ft']:.0f} ft")
+            print(f"  Current heading: {current_state['hdg_deg']:.1f}°")
+            print(f"  Current speed: {current_state['spd_kt']:.1f} kt")
             print(f"  Assessment: {analysis.get('current_assessment', 'N/A')}")
+            print(f"  Route adherence: {analysis.get('route_adherence', 'N/A')}")
             print(f"  Optimization needed: {analysis.get('optimization_needed', 'N/A')}")
             print(f"  Recommended action: {analysis.get('recommended_action', 'N/A')}")
             print(f"  BlueSky command: {analysis.get('bluesky_command', 'N/A')}")
             print(f"  Confidence: {analysis.get('confidence', 'N/A')}")
+            
+            # Add current state to analysis
+            analysis['current_bluesky_state'] = current_state
             
             return {"success": True, "analysis": analysis}
         else:
@@ -207,9 +286,9 @@ OUTPUT FORMAT (JSON only):
             return {"success": False, "error": result.get("error", "Unknown error")}
     
     def step3_llm_to_bluesky(self, llm_analysis: Dict[str, Any], aircraft_data: Dict[str, Any]) -> Dict[str, Any]:
-        """STEP 3: Convert LLM analysis to BlueSky commands and execute simulation."""
+        """STEP 3: Execute LLM recommendations in BlueSky simulation."""
         print("\n" + "="*60)
-        print("STEP 3: LLM TO BLUESKY")
+        print("STEP 3: LLM TO BLUESKY EXECUTION")
         print("="*60)
         
         analysis = llm_analysis["analysis"]
@@ -219,47 +298,77 @@ OUTPUT FORMAT (JSON only):
         bluesky_command = analysis.get("bluesky_command", "none")
         
         if bluesky_command == "none" or not analysis.get("optimization_needed", False):
-            print(f"No optimization needed for {callsign}")
+            print(f"No optimization needed for {callsign} - continuing route following")
             return {"success": True, "command": None, "executed": False}
         
-        # Parse and validate command
+        # Parse and execute command in real BlueSky
         if bluesky_command.startswith(callsign):
             self.log_debug(f"Executing BlueSky command: {bluesky_command}")
-            
-            # Simulate command execution by updating aircraft state
-            updated_aircraft = aircraft_data.copy()
             
             # Parse command type
             parts = bluesky_command.split()
             if len(parts) >= 3:
-                command_type = parts[1]
+                command_type = parts[1].upper()
                 value = parts[2]
                 
-                if command_type == "HDG":
-                    updated_aircraft["heading"] = float(value)
-                    print(f"Executed: Changed heading to {value}deg")
-                    
-                elif command_type == "ALT":
-                    updated_aircraft["altitude_ft"] = float(value)
-                    print(f"Executed: Changed altitude to {value} ft")
-                    
-                elif command_type == "SPD":
-                    updated_aircraft["speed_kt"] = float(value)
-                    print(f"Executed: Changed speed to {value} kt")
+                execution_success = False
                 
-                # Log execution details
-                print(f"Command executed successfully: {bluesky_command}")
-                print(f"Rationale: {analysis.get('rationale', 'N/A')}")
-                print(f"Safety assessment: {analysis.get('safety_assessment', 'N/A')}")
-                print(f"Fuel impact: {analysis.get('fuel_impact', 'N/A')}")
-                
-                return {
-                    "success": True, 
-                    "command": bluesky_command, 
-                    "executed": True,
-                    "updated_aircraft": updated_aircraft,
-                    "analysis": analysis
-                }
+                try:
+                    if command_type == "HDG":
+                        # Execute heading change
+                        heading = float(value)
+                        execution_success = self.bluesky_client.set_heading(callsign, heading)
+                        print(f"Executed: Changed heading to {heading}°")
+                        
+                    elif command_type == "ALT":
+                        # Execute altitude change
+                        altitude = float(value)
+                        execution_success = self.bluesky_client.set_altitude(callsign, altitude)
+                        print(f"Executed: Changed altitude to {altitude} ft")
+                        
+                    elif command_type == "SPD":
+                        # Execute speed change
+                        speed = float(value)
+                        execution_success = self.bluesky_client.set_speed(callsign, speed)
+                        print(f"Executed: Changed speed to {speed} kt")
+                        
+                    elif command_type == "DCT":
+                        # Execute direct-to waypoint
+                        waypoint = value
+                        execution_success = self.bluesky_client.direct_to(callsign, waypoint)
+                        print(f"Executed: Direct to waypoint {waypoint}")
+                    
+                    # Step simulation to apply changes
+                    self.bluesky_client.step_minutes(1.0)
+                    
+                    # Get updated state to verify execution
+                    updated_states = self.bluesky_client.get_aircraft_states()
+                    if callsign in updated_states:
+                        updated_state = updated_states[callsign]
+                        print(f"Updated state:")
+                        print(f"  Position: {updated_state['lat']:.4f}N, {updated_state['lon']:.4f}E")
+                        print(f"  Altitude: {updated_state['alt_ft']:.0f} ft")
+                        print(f"  Heading: {updated_state['hdg_deg']:.1f}°")
+                        print(f"  Speed: {updated_state['spd_kt']:.1f} kt")
+                    
+                    # Log execution details
+                    print(f"Command executed: {bluesky_command}")
+                    print(f"Execution success: {execution_success}")
+                    print(f"Rationale: {analysis.get('rationale', 'N/A')}")
+                    print(f"Safety assessment: {analysis.get('safety_assessment', 'N/A')}")
+                    print(f"Fuel impact: {analysis.get('fuel_impact', 'N/A')}")
+                    
+                    return {
+                        "success": True, 
+                        "command": bluesky_command, 
+                        "executed": execution_success,
+                        "updated_state": updated_states.get(callsign, {}),
+                        "analysis": analysis
+                    }
+                    
+                except Exception as e:
+                    print(f"Command execution failed: {e}")
+                    return {"success": False, "error": f"Command execution failed: {e}"}
             else:
                 self.log_debug(f"Invalid command format: {bluesky_command}")
                 return {"success": False, "error": "Invalid command format"}
@@ -268,7 +377,7 @@ OUTPUT FORMAT (JSON only):
             return {"success": False, "error": "Command callsign mismatch"}
     
     def run_iterative_loop(self, aircraft_data: Dict[str, Any], max_iterations: int = 3) -> List[Dict[str, Any]]:
-        """Run iterative BlueSky <-> LLM communication loop."""
+        """Run iterative BlueSky <-> LLM communication loop with real simulation."""
         print("\n" + "="*80)
         print(f"ITERATIVE COMMUNICATION LOOP ({max_iterations} iterations)")
         print("="*80)
@@ -279,14 +388,18 @@ OUTPUT FORMAT (JSON only):
         for iteration in range(1, max_iterations + 1):
             print(f"\n*** ITERATION {iteration}/{max_iterations} ***")
             
-            # Step 2: BlueSky to LLM
+            # Step simulation forward to get new state
+            print(f"Advancing BlueSky simulation by 1 minute...")
+            self.bluesky_client.step_minutes(1.0)
+            
+            # Step 2: BlueSky to LLM (using real current state)
             llm_result = self.step2_bluesky_to_llm(current_aircraft, iteration)
             
             if not llm_result["success"]:
                 print(f"Iteration {iteration} failed: {llm_result.get('error', 'Unknown error')}")
                 break
             
-            # Step 3: LLM to BlueSky
+            # Step 3: LLM to BlueSky (execute real commands)
             command_result = self.step3_llm_to_bluesky(llm_result, current_aircraft)
             
             # Record iteration result
@@ -295,20 +408,27 @@ OUTPUT FORMAT (JSON only):
                 "llm_analysis": llm_result.get("analysis", {}),
                 "command_executed": command_result.get("executed", False),
                 "bluesky_command": command_result.get("command", None),
-                "success": command_result["success"]
+                "success": command_result["success"],
+                "bluesky_state": llm_result.get("analysis", {}).get("current_bluesky_state", {})
             }
             
             iteration_results.append(iteration_result)
             
-            # Update aircraft state if command was executed
-            if command_result.get("executed", False):
-                current_aircraft = command_result["updated_aircraft"]
-                print(f"Aircraft state updated for next iteration")
+            # Update aircraft data with latest BlueSky state if available
+            if command_result.get("updated_state"):
+                print(f"Aircraft state updated with real BlueSky data")
+                # Keep original aircraft metadata but update with real state
+                current_aircraft.update({
+                    "latitude": command_result["updated_state"]["lat"],
+                    "longitude": command_result["updated_state"]["lon"],
+                    "altitude_ft": command_result["updated_state"]["alt_ft"],
+                    "heading_deg": command_result["updated_state"]["hdg_deg"],
+                    "speed_kt": command_result["updated_state"]["spd_kt"]
+                })
             else:
-                print(f"No changes made - aircraft state unchanged")
-                # If no changes, we've reached optimal state
-                break
-        
+                print(f"No BlueSky state update - aircraft following original route")
+                # If no command executed, aircraft continues on autopilot route
+                
         return iteration_results
     
     def run_complete_demonstration(self, scat_file: str = "scenarios/scat/100000.json") -> Dict[str, Any]:

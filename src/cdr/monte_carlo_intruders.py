@@ -309,6 +309,9 @@ class MonteCarloIntruderGenerator:
         )
         intruder_time = path_point.timestamp + time_variance
         
+        # Generate spawn time offset (when intruder should enter simulation)
+        spawn_delay_min = self.rng.uniform(0.0, self.params.time_window_min * 0.5)
+        
         return AircraftState(
             aircraft_id=f"INTRUDER_{flight_record.flight_id}_{intruder_idx:02d}",
             timestamp=intruder_time,
@@ -319,7 +322,8 @@ class MonteCarloIntruderGenerator:
             heading_deg=intruder_heading,
             vertical_speed_fpm=self.rng.uniform(-1000, 1000),
             callsign=f"INT{intruder_idx:02d}",
-            aircraft_type=self.rng.choice(["B737", "A320", "B777", "A350"])
+            aircraft_type=self.rng.choice(["B737", "A320", "B777", "A350"]),
+            spawn_offset_min=spawn_delay_min
         )
     
     def _generate_non_conflicting_intruder(self, flight_record: FlightRecord,
@@ -346,6 +350,9 @@ class MonteCarloIntruderGenerator:
             minutes=self.rng.uniform(-30, 30)
         )
         
+        # Generate spawn time offset for non-conflicting intruders (later entry)
+        spawn_delay_min = self.rng.uniform(5.0, self.params.time_window_min * 0.8)
+        
         return AircraftState(
             aircraft_id=f"TRAFFIC_{flight_record.flight_id}_{intruder_idx:02d}",
             timestamp=timestamp,
@@ -356,7 +363,8 @@ class MonteCarloIntruderGenerator:
             heading_deg=heading,
             vertical_speed_fpm=self.rng.uniform(-1000, 1000),
             callsign=f"TFC{intruder_idx:02d}",
-            aircraft_type=self.rng.choice(["B737", "A320", "B777", "A350"])
+            aircraft_type=self.rng.choice(["B737", "A320", "B777", "A350"]),
+            spawn_offset_min=spawn_delay_min
         )
     
     def _calculate_airspace_bounds(self, flight_record: FlightRecord) -> Dict[str, float]:

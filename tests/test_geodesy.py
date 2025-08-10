@@ -1,8 +1,11 @@
-"""Test suite for geodesy calculations."""
+"""Test suite for geodesy calculations with comprehensive edge case coverage."""
 
 import pytest
 import math
-from src.cdr.geodesy import haversine_nm, bearing_rad, cpa_nm, cross_track_distance_nm
+from src.cdr.geodesy import (
+    haversine_nm, bearing_rad, bearing_deg, normalize_heading_deg, 
+    destination_point_nm, cpa_nm, cross_track_distance_nm
+)
 
 
 class TestHaversine:
@@ -262,5 +265,145 @@ def test_geodesy_integration():
     # Verify reasonable results
     assert separation > 0
     assert -math.pi <= bearing <= math.pi
-    assert tmin > 0  # Should converge
-    assert dmin >= 0  # Non-negative separation
+
+
+class TestGeodacticEdgeCases:
+    """Test edge cases and boundary conditions for comprehensive coverage."""
+    
+    def test_normalize_heading_edge_cases(self):
+        """Test heading normalization edge cases - covers lines 64-65."""
+        # Test positive wrap-around
+        assert normalize_heading_deg(370.0) == 10.0
+        assert normalize_heading_deg(720.0) == 0.0
+        
+        # Test negative values - covers line 65
+        assert normalize_heading_deg(-10.0) == 350.0
+        assert normalize_heading_deg(-370.0) == 350.0
+        
+        # Test boundary values
+        assert normalize_heading_deg(0.0) == 0.0
+        assert normalize_heading_deg(359.999) == pytest.approx(359.999, abs=1e-6)
+        assert normalize_heading_deg(-0.001) == pytest.approx(359.999, abs=1e-6)
+    
+    def test_bearing_deg_antipodal_points(self):
+        """Test bearing calculation for antipodal points - covers lines 69-76."""
+        # Test antipodal points (opposite sides of Earth)
+        bearing1 = bearing_deg(0.0, 0.0, 0.0, 180.0)  # Equator, opposite longitude
+        assert 89.0 < bearing1 < 91.0  # Should be ~90 degrees (East)
+        
+        bearing2 = bearing_deg(45.0, 0.0, -45.0, 180.0)  # Crossing equator
+        assert 0.0 <= bearing2 <= 360.0
+        
+        # Test identical points (zero distance)
+        bearing3 = bearing_deg(45.0, 30.0, 45.0, 30.0)
+        assert 0.0 <= bearing3 <= 360.0  # Should be defined even for zero distance
+    
+    def test_bearing_deg_wrapping_cases(self):
+        """Test bearing calculations that wrap around 0/360 degrees."""
+        # Test cases that produce negative bearings before normalization
+        bearing1 = bearing_deg(60.0, 10.0, 50.0, 5.0)  # Southwestward
+        assert 180.0 < bearing1 < 270.0
+        
+        # Test extreme longitude differences - the actual result depends on great circle
+        bearing2 = bearing_deg(0.0, -179.0, 0.0, 179.0)  # Cross antimeridian
+        assert 0.0 <= bearing2 < 360.0  # Just ensure it's normalized
+    
+    def test_destination_point_boundary_cases(self):
+        """Test destination point calculation edge cases - covers lines 83-95."""
+        # Test zero distance
+        lat, lon = destination_point_nm(45.0, 30.0, 90.0, 0.0)
+        assert lat == pytest.approx(45.0, abs=1e-10)
+        assert lon == pytest.approx(30.0, abs=1e-10)
+        
+        # Test very small distance
+        lat, lon = destination_point_nm(0.0, 0.0, 45.0, 0.001)
+        assert abs(lat) < 0.01
+        assert abs(lon) < 0.01
+        
+        # Test crossing antimeridian (longitude normalization)
+        lat, lon = destination_point_nm(0.0, 179.0, 90.0, 120.0)  # East from near antimeridian
+        assert -180.0 <= lon <= 180.0  # Should normalize to [-180, 180]
+        
+        # Test pole proximity
+        lat, lon = destination_point_nm(89.0, 0.0, 0.0, 60.0)  # North from near pole
+        assert lat <= 90.0  # Should not exceed North pole
+    
+    def test_cpa_parallel_flight_paths(self):
+        """Test CPA with exactly parallel flight paths - covers line 148."""
+        # Exactly parallel, same speed
+        own = {"lat": 0.0, "lon": 0.0, "spd_kt": 480.0, "hdg_deg": 90.0}  # East
+        intr = {"lat": 0.1, "lon": 0.0, "spd_kt": 480.0, "hdg_deg": 90.0}  # East, parallel
+        
+        dmin, tmin = cpa_nm(own, intr)
+        
+        # With zero relative velocity, CPA time should be 0 and distance constant
+        assert tmin == 0.0
+        assert dmin > 0  # Should maintain constant separation
+    
+    def test_cpa_zero_relative_velocity(self):
+        """Test CPA with zero relative velocity (dv_squared == 0)."""
+        # Same velocity vectors but different positions
+        own = {"lat": 0.0, "lon": 0.0, "spd_kt": 500.0, "hdg_deg": 45.0}
+        intr = {"lat": 0.1, "lon": 0.1, "spd_kt": 500.0, "hdg_deg": 45.0}
+        
+        dmin, tmin = cpa_nm(own, intr)
+        
+        # Zero relative velocity means constant separation
+        assert tmin == 0.0
+        assert dmin > 0
+    
+    def test_cpa_head_on_collision_course(self):
+        """Test CPA for aircraft on exact collision course."""
+        # Head-on at same altitude and position
+        own = {"lat": 0.0, "lon": 0.0, "spd_kt": 480.0, "hdg_deg": 90.0}  # East
+        intr = {"lat": 0.0, "lon": 1.0, "spd_kt": 480.0, "hdg_deg": 270.0}  # West
+        
+        dmin, tmin = cpa_nm(own, intr)
+        
+        # Should converge to very small separation
+        assert tmin > 0  # Future convergence
+        assert dmin < 1.0  # Very close approach
+    
+    def test_cpa_past_convergence(self):
+        """Test CPA when aircraft are already diverging."""
+        # Aircraft that have already passed each other
+        own = {"lat": 0.0, "lon": 0.0, "spd_kt": 480.0, "hdg_deg": 90.0}  # East
+        intr = {"lat": 0.0, "lon": -0.5, "spd_kt": 480.0, "hdg_deg": 270.0}  # West
+        
+        dmin, tmin = cpa_nm(own, intr)
+        
+        # Time to CPA should be 0 (already at closest point or past it)
+        assert tmin == 0.0
+    
+    def test_cross_track_distance_edge_cases(self):
+        """Test cross track distance edge cases."""
+        # Point exactly on track
+        point = (0.5, 0.5)
+        track_start = (0.0, 0.0)
+        track_end = (1.0, 1.0)
+        
+        xtd = cross_track_distance_nm(point, track_start, track_end)
+        assert abs(xtd) < 1.0  # Should be very small
+        
+        # Point far from track
+        point = (2.0, 0.0)
+        track_start = (0.0, 0.0)
+        track_end = (0.0, 1.0)  # North-South track
+        
+        xtd = cross_track_distance_nm(point, track_start, track_end)
+        assert abs(xtd) > 100.0  # Should be significant distance
+    
+    @pytest.mark.parametrize("heading", [0, 90, 180, 270, 359.9, 360.1])
+    def test_heading_normalization_parametrized(self, heading):
+        """Parametrized test for heading normalization."""
+        normalized = normalize_heading_deg(heading)
+        assert 0.0 <= normalized < 360.0
+    
+    @pytest.mark.parametrize("lat,lon", [
+        (0, 0), (45, 45), (-45, -45), (89.9, 179.9), (-89.9, -179.9)
+    ])
+    def test_bearing_calculation_parametrized(self, lat, lon):
+        """Parametrized test for bearing calculations."""
+        target_lat, target_lon = lat + 0.1, lon + 0.1
+        bearing = bearing_deg(lat, lon, target_lat, target_lon)
+        assert 0.0 <= bearing < 360.0

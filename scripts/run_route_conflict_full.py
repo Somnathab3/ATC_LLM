@@ -255,6 +255,11 @@ def _execute_llm_resolution(resolution_cmd: ResolutionCommand, bs: BlueSkyClient
             log.info("LLM Resolution: Set speed %s to %.0f kt - %s", 
                     resolution_cmd.target_aircraft, resolution_cmd.new_speed_kt, "SUCCESS" if result else "FAILED")
             return result
+        elif resolution_cmd.resolution_type == ResolutionType.WAYPOINT_DIRECT and resolution_cmd.waypoint_name is not None:
+            result = bs.direct_to(resolution_cmd.target_aircraft, resolution_cmd.waypoint_name)
+            log.info("LLM Resolution: Direct %s to %s - %s", 
+                    resolution_cmd.target_aircraft, resolution_cmd.waypoint_name, "SUCCESS" if result else "FAILED")
+            return result
         else:
             log.warning("Unsupported resolution type: %s", resolution_cmd.resolution_type)
             return False

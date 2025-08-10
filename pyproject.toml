@@ -79,9 +79,15 @@ ignore = [
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "-ra -q --strict-markers --cov=src --cov-report=term-missing --cov-report=html"
+addopts = "-q --maxfail=1 --disable-warnings --strict-markers --cov=src --cov-report=term-missing --cov-fail-under=13"
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "slow: integration or heavy tests",
+    "integration: marks tests as integration tests",
+    "smoke: marks tests as smoke tests", 
+    "unit: marks tests as unit tests"
+]
 
 [tool.mypy]
 python_version = "3.11"

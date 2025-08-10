@@ -9,13 +9,14 @@ This module implements conflict resolution logic that:
 
 import logging
 import math
+import traceback
 from typing import Optional, Dict, Any, Tuple, List
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from collections import defaultdict
 
 from .schemas import (
-    ResolveOut, ResolutionCommand, ResolutionType, 
+    ResolveOut, ResolutionCommand, ResolutionType, ResolutionEngine,
     AircraftState, ConflictPrediction
 )
 from .geodesy import cpa_nm
@@ -188,9 +189,9 @@ def _estimate_separation_benefit(
 
 def execute_resolution(
     llm_resolution: ResolveOut,
-    ownship: AircraftState,
-    intruder: AircraftState,
-    conflict: ConflictPrediction
+    ownship: Optional[AircraftState] = None,
+    intruder: Optional[AircraftState] = None,
+    conflict: Optional[ConflictPrediction] = None
 ) -> Optional[ResolutionCommand]:
     """Execute LLM resolution with safety validation.
     
@@ -204,23 +205,78 @@ def execute_resolution(
         Validated resolution command or None if unsafe
     """
     try:
+        # If context not provided (legacy call), exit gracefully
+        if ownship is None or intruder is None or conflict is None:
+            logger.warning("execute_resolution called without full context; returning None")
+            return None
+        # DEBUG: Log LLM resolution details
+        logger.info("=" * 60)
+        logger.info("EXECUTE_RESOLUTION DEBUG")
+        logger.info("=" * 60)
+        logger.info(f"LLM Resolution Received:")
+        logger.info(f"  Action: {llm_resolution.action}")
+        logger.info(f"  Parameters: {llm_resolution.params}")
+        logger.info(f"  Reason: {getattr(llm_resolution, 'reason', 'No reason provided')}")
+        # Note: target_aircraft is determined during command creation, not in LLM response
+        logger.info(f"Ownship State:")
+        logger.info(f"  ID: {ownship.aircraft_id}")
+        logger.info(f"  Position: {ownship.latitude:.4f}, {ownship.longitude:.4f}")
+        logger.info(f"  Altitude: {ownship.altitude_ft:.0f} ft")
+        logger.info(f"  Heading: {ownship.heading_deg:.1f}°")
+        logger.info(f"  Speed: {ownship.ground_speed_kt:.0f} kt")
+        logger.info(f"Intruder State:")
+        logger.info(f"  ID: {intruder.aircraft_id}")
+        logger.info(f"  Position: {intruder.latitude:.4f}, {intruder.longitude:.4f}")
+        logger.info(f"  Altitude: {intruder.altitude_ft:.0f} ft")
+        logger.info(f"  Heading: {intruder.heading_deg:.1f}°")
+        logger.info(f"  Speed: {intruder.ground_speed_kt:.0f} kt")
+        logger.info(f"Conflict Details:")
+        logger.info(f"  Distance at CPA: {conflict.distance_at_cpa_nm:.2f} nm")
+        logger.info(f"  Time to CPA: {conflict.time_to_cpa_min:.2f} min")
+        logger.info(f"  Severity: {conflict.severity_score:.2f}")
+        logger.info("-" * 60)
+        
         # Create initial resolution command
         resolution_cmd = _create_resolution_command(llm_resolution, ownship)
         
         if resolution_cmd is None:
-            logger.error("Failed to create resolution command")
+            logger.error("FAILED: Could not create resolution command from LLM response")
+            logger.error(f"LLM action: {llm_resolution.action}")
+            logger.error(f"LLM params: {llm_resolution.params}")
+            logger.info("=" * 60)
             return None
+        
+        # DEBUG: Log created resolution command
+        logger.info(f"Resolution Command Created:")
+        logger.info(f"  Resolution ID: {resolution_cmd.resolution_id}")
+        logger.info(f"  Target Aircraft: {resolution_cmd.target_aircraft}")
+        logger.info(f"  Resolution Type: {resolution_cmd.resolution_type}")
+        logger.info(f"  New Heading: {resolution_cmd.new_heading_deg}°")
+        logger.info(f"  New Altitude: {resolution_cmd.new_altitude_ft} ft")
+        logger.info(f"  New Speed: {resolution_cmd.new_speed_kt} kt")
+        logger.info(f"  Command Reasoning: {getattr(resolution_cmd, 'reasoning', 'No reasoning')}")
+        logger.info("-" * 60)
         
         # Check oscillation guard before proceeding
         command_type = _classify_command_type(resolution_cmd, ownship)
         separation_benefit = _estimate_separation_benefit(resolution_cmd, ownship, intruder)
         
+        logger.info(f"Safety Checks:")
+        logger.info(f"  Command Type: {command_type}")
+        logger.info(f"  Estimated Separation Benefit: {separation_benefit:.2f} nm")
+        
         if not _check_oscillation_guard(ownship.aircraft_id, command_type, separation_benefit):
-            logger.warning(f"Oscillation guard blocked resolution for {ownship.aircraft_id}")
+            logger.warning(f"FAILED: Oscillation guard blocked resolution for {ownship.aircraft_id}")
+            logger.info("=" * 60)
             return None
+        
+        logger.info(f"  Oscillation Guard: PASSED")
             
         # Validate safety
-        if _validate_resolution_safety(resolution_cmd, ownship, intruder):
+        safety_result = _validate_resolution_safety(resolution_cmd, ownship, intruder)
+        logger.info(f"  Safety Validation: {'PASSED' if safety_result else 'FAILED'}")
+        
+        if safety_result:
             resolution_cmd.is_validated = True
             
             # Add to command history for oscillation tracking
@@ -241,22 +297,33 @@ def execute_resolution(
             )
             
             logger.info(f"Resolution validated: {llm_resolution.action}")
+            logger.info("Resolution ACCEPTED and validated successfully")
+            logger.info("=" * 60)
             return resolution_cmd
         else:
-            logger.warning(f"LLM resolution failed safety validation: {llm_resolution.action}")
+            logger.warning(f"FAILED: LLM resolution failed safety validation: {llm_resolution.action}")
+            logger.warning("Attempting fallback resolution...")
             
             # Try fallback resolution
             fallback_cmd = _generate_fallback_resolution(ownship, intruder, conflict)
             if fallback_cmd and _validate_resolution_safety(fallback_cmd, ownship, intruder):
                 fallback_cmd.is_validated = True
-                logger.info("Fallback resolution validated")
+                logger.info("Fallback resolution validated and accepted")
+                logger.info("=" * 60)
                 return fallback_cmd
             else:
-                logger.error("No safe resolution found")
+                logger.error("FAILED: No safe resolution found (fallback also failed)")
+                logger.info("=" * 60)
                 return None
                 
     except Exception as e:
-        logger.error(f"Resolution execution failed: {e}")
+        logger.error("EXCEPTION in execute_resolution:")
+        logger.error(f"  Error: {e}")
+        logger.error(f"  LLM Action: {llm_resolution.action}")
+        logger.error(f"  LLM Params: {llm_resolution.params}")
+        import traceback
+        logger.error(f"  Traceback: {traceback.format_exc()}")
+        logger.info("=" * 60)
         return None
 
 
@@ -288,12 +355,21 @@ def generate_horizontal_resolution(
             resolution_id=f"h_res_{int(datetime.now().timestamp())}",
             target_aircraft=ownship.aircraft_id,
             resolution_type=ResolutionType.HEADING_CHANGE,
+            source_engine=ResolutionEngine.HORIZONTAL,
             new_heading_deg=new_heading,
             new_speed_kt=None,
             new_altitude_ft=None,
+            waypoint_name=None,
+            waypoint_lat=None,
+            waypoint_lon=None,
+            diversion_distance_nm=None,
             issue_time=datetime.now(),
             safety_margin_nm=5.0,
-            is_validated=False
+            is_validated=False,
+            is_ownship_command=True,
+            angle_within_limits=True,
+            altitude_within_limits=True,
+            rate_within_limits=True
         )
         
     except Exception as e:
@@ -332,12 +408,21 @@ def generate_vertical_resolution(
             resolution_id=f"v_res_{int(datetime.now().timestamp())}",
             target_aircraft=ownship.aircraft_id,
             resolution_type=ResolutionType.ALTITUDE_CHANGE,
+            source_engine=ResolutionEngine.VERTICAL,
             new_heading_deg=None,
             new_speed_kt=None,
             new_altitude_ft=new_altitude,
+            waypoint_name=None,
+            waypoint_lat=None,
+            waypoint_lon=None,
+            diversion_distance_nm=None,
             issue_time=datetime.now(),
             safety_margin_nm=5.0,
-            is_validated=False
+            is_validated=False,
+            is_ownship_command=True,
+            angle_within_limits=True,
+            altitude_within_limits=True,
+            rate_within_limits=True
         )
         
     except Exception as e:
@@ -360,7 +445,7 @@ def _create_resolution_command(
     """
     try:
         # Validate action type
-        if llm_resolution.action not in ["turn", "climb", "descend"]:
+        if llm_resolution.action not in ["turn", "climb", "descend", "waypoint"]:
             logger.error(f"Invalid action type: {llm_resolution.action}")
             return None
             
@@ -369,20 +454,40 @@ def _create_resolution_command(
             resolution_id=f"res_{int(datetime.now().timestamp())}",
             target_aircraft=ownship.aircraft_id,
             resolution_type=_map_action_to_resolution_type(llm_resolution.action),
+            source_engine=ResolutionEngine.HORIZONTAL,  # Default to horizontal engine
             new_heading_deg=None,
             new_speed_kt=None,
             new_altitude_ft=None,
+            waypoint_name=None,
+            waypoint_lat=None,
+            waypoint_lon=None,
+            diversion_distance_nm=None,
             issue_time=datetime.now(),
             safety_margin_nm=0.0,  # Will be calculated later
-            is_validated=False
+            is_validated=False,
+            is_ownship_command=True,
+            angle_within_limits=True,
+            altitude_within_limits=True,
+            rate_within_limits=True
         )
         
         # Apply action-specific parameters
         if llm_resolution.action == "turn":
             new_heading = llm_resolution.params.get("heading_deg")
             if new_heading is None:
-                logger.error("Turn action missing heading_deg parameter")
-                return None
+                # If LLM didn't specify exact heading, use intelligent default
+                turn_direction = llm_resolution.params.get("direction", "right")  # default right
+                turn_amount = llm_resolution.params.get("degrees", 30)  # default 30 degrees
+                
+                if turn_direction.lower() in ["right", "starboard", "clockwise"]:
+                    new_heading = (ownship.heading_deg + turn_amount) % 360
+                elif turn_direction.lower() in ["left", "port", "counterclockwise"]:
+                    new_heading = (ownship.heading_deg - turn_amount) % 360
+                else:
+                    # Default to right turn of 30 degrees for conflict avoidance
+                    new_heading = (ownship.heading_deg + 30) % 360
+                
+                logger.info(f"LLM turn action without heading_deg, using {turn_direction} turn {turn_amount}deg: {ownship.heading_deg:.1f}° → {new_heading:.1f}°")
                 
             # Validate heading change magnitude
             heading_change = abs(new_heading - ownship.heading_deg)
@@ -401,8 +506,23 @@ def _create_resolution_command(
                 
         elif llm_resolution.action in ["climb", "descend"]:
             delta_ft = llm_resolution.params.get("delta_ft")
+            altitude_change_ft = llm_resolution.params.get("altitude_change_ft")
+            
+            if delta_ft is None and altitude_change_ft is None:
+                # If LLM didn't specify exact altitude change, use intelligent default
+                default_change = 1000  # 1000 ft default
+                if llm_resolution.action == "climb":
+                    delta_ft = default_change
+                else:  # descend
+                    delta_ft = -default_change
+                logger.info(f"LLM {llm_resolution.action} action without delta_ft, using default {delta_ft} ft")
+            elif altitude_change_ft is not None:
+                # LLM used altitude_change_ft instead of delta_ft
+                delta_ft = altitude_change_ft if llm_resolution.action == "climb" else -altitude_change_ft
+            
+            # Ensure delta_ft is not None at this point
             if delta_ft is None:
-                logger.error(f"{llm_resolution.action} action missing delta_ft parameter")
+                logger.error(f"Unable to determine altitude change for {llm_resolution.action} action")
                 return None
                 
             # Validate altitude change magnitude
@@ -422,6 +542,38 @@ def _create_resolution_command(
                 
             # Ensure altitude stays within reasonable bounds
             cmd.new_altitude_ft = max(1000, min(45000, cmd.new_altitude_ft))
+            
+        elif llm_resolution.action == "waypoint":
+            # Handle waypoint direct resolution
+            from .nav_utils import validate_waypoint_diversion
+            
+            waypoint_name = llm_resolution.params.get("waypoint_name")
+            if not waypoint_name:
+                logger.error("Waypoint action missing 'waypoint_name' parameter")
+                return None
+            
+            # Get maximum diversion distance from config (fallback to default)
+            max_diversion_nm = 80.0  # Default value
+            
+            # Validate waypoint exists and is within limits
+            validation_result = validate_waypoint_diversion(
+                ownship.latitude, ownship.longitude, waypoint_name, max_diversion_nm
+            )
+            
+            if not validation_result:
+                logger.warning(f"Waypoint '{waypoint_name}' validation failed - not found or too far")
+                return None
+            
+            wp_lat, wp_lon, distance_nm = validation_result
+            
+            # Create waypoint direct resolution command
+            cmd.resolution_type = ResolutionType.WAYPOINT_DIRECT
+            cmd.waypoint_name = waypoint_name.upper()
+            cmd.waypoint_lat = wp_lat
+            cmd.waypoint_lon = wp_lon
+            cmd.diversion_distance_nm = distance_nm
+            
+            logger.info(f"Waypoint direct resolution: {waypoint_name} at {distance_nm:.1f} NM")
             
         return cmd
         
@@ -446,16 +598,28 @@ def _validate_resolution_safety(
         True if resolution is safe
     """
     try:
+        logger.info("    SAFETY VALIDATION DETAILS:")
+        logger.info(f"      Current Ownship: {ownship.heading_deg:.1f}° @ {ownship.altitude_ft:.0f} ft")
+        logger.info(f"      Current Intruder: {intruder.heading_deg:.1f}° @ {intruder.altitude_ft:.0f} ft")
+        
         # Create modified ownship state with resolution applied
+        new_heading = resolution_cmd.new_heading_deg or ownship.heading_deg
+        new_altitude = resolution_cmd.new_altitude_ft or ownship.altitude_ft
+        
+        logger.info(f"      Proposed Ownship: {new_heading:.1f}° @ {new_altitude:.0f} ft")
+        logger.info(f"      Resolution Type: {resolution_cmd.resolution_type}")
+        
         modified_ownship = AircraftState(
             aircraft_id=ownship.aircraft_id,
             timestamp=ownship.timestamp,
             latitude=ownship.latitude,
             longitude=ownship.longitude,
-            altitude_ft=resolution_cmd.new_altitude_ft or ownship.altitude_ft,
+            altitude_ft=new_altitude,
             ground_speed_kt=ownship.ground_speed_kt,
-            heading_deg=resolution_cmd.new_heading_deg or ownship.heading_deg,
-            vertical_speed_fpm=ownship.vertical_speed_fpm
+            heading_deg=new_heading,
+            vertical_speed_fpm=ownship.vertical_speed_fpm,
+            aircraft_type=getattr(ownship, 'aircraft_type', 'B737'),
+            spawn_offset_min=getattr(ownship, 'spawn_offset_min', 0.0)
         )
         
         # Convert to format for CPA calculation
@@ -475,24 +639,37 @@ def _validate_resolution_safety(
             "alt_ft": intruder.altitude_ft
         }
         
+        logger.info(f"      Own State for CPA: {own_dict}")
+        logger.info(f"      Intruder State for CPA: {intr_dict}")
+        
         # Calculate CPA with resolution applied
         dmin_nm, _ = cpa_nm(own_dict, intr_dict)
         
         # Calculate altitude separation
         alt_diff = abs(modified_ownship.altitude_ft - intruder.altitude_ft)
         
+        logger.info(f"      Calculated Horizontal Separation: {dmin_nm:.2f} nm")
+        logger.info(f"      Calculated Vertical Separation: {alt_diff:.0f} ft")
+        logger.info(f"      Required Horizontal: {MIN_SAFE_SEPARATION_NM:.1f} nm")
+        logger.info(f"      Required Vertical: {MIN_SAFE_SEPARATION_FT:.0f} ft")
+        
         # Check if resolution maintains safe separation
         horizontal_safe = dmin_nm >= MIN_SAFE_SEPARATION_NM
         vertical_safe = alt_diff >= MIN_SAFE_SEPARATION_FT
+        
+        logger.info(f"      Horizontal Safe: {horizontal_safe} ({dmin_nm:.2f} >= {MIN_SAFE_SEPARATION_NM:.1f})")
+        logger.info(f"      Vertical Safe: {vertical_safe} ({alt_diff:.0f} >= {MIN_SAFE_SEPARATION_FT:.0f})")
         
         is_safe = horizontal_safe or vertical_safe  # Only need one dimension to be safe
         
         if is_safe:
             # Update safety margin in command
             resolution_cmd.safety_margin_nm = dmin_nm
-            logger.debug(f"Resolution safety check passed: dmin={dmin_nm:.2f} NM, alt_diff={alt_diff:.0f} ft")
+            logger.info(f"      SAFETY RESULT: PASSED (either horizontal OR vertical safe)")
         else:
-            logger.warning(f"Resolution safety check failed: dmin={dmin_nm:.2f} NM, alt_diff={alt_diff:.0f} ft")
+            logger.warning(f"      SAFETY RESULT: FAILED (BOTH horizontal AND vertical unsafe)")
+            logger.warning(f"        Horizontal shortfall: {MIN_SAFE_SEPARATION_NM - dmin_nm:.2f} nm")
+            logger.warning(f"        Vertical shortfall: {MIN_SAFE_SEPARATION_FT - alt_diff:.0f} ft")
             
         return is_safe
         
@@ -524,12 +701,21 @@ def _generate_fallback_resolution(
             resolution_id=f"fallback_{int(datetime.now().timestamp())}",
             target_aircraft=ownship.aircraft_id,
             resolution_type=ResolutionType.ALTITUDE_CHANGE,
+            source_engine=ResolutionEngine.FALLBACK,
             new_heading_deg=None,
             new_speed_kt=None,
             new_altitude_ft=ownship.altitude_ft + 1000,
+            waypoint_name=None,
+            waypoint_lat=None,
+            waypoint_lon=None,
+            diversion_distance_nm=None,
             issue_time=datetime.now(),
             safety_margin_nm=0.0,
-            is_validated=False
+            is_validated=False,
+            is_ownship_command=True,
+            angle_within_limits=True,
+            altitude_within_limits=True,
+            rate_within_limits=True
         )
         
         return fallback_cmd
@@ -551,16 +737,17 @@ def _map_action_to_resolution_type(action: str) -> ResolutionType:
     action_map = {
         "turn": ResolutionType.HEADING_CHANGE,
         "climb": ResolutionType.ALTITUDE_CHANGE,
-        "descend": ResolutionType.ALTITUDE_CHANGE
+        "descend": ResolutionType.ALTITUDE_CHANGE,
+        "waypoint": ResolutionType.WAYPOINT_DIRECT
     }
     
     return action_map.get(action, ResolutionType.HEADING_CHANGE)
 
 
 def apply_resolution(
-    bs: Any, 
-    cs: str, 
-    advise: ResolveOut, 
+    bs: Optional[Any] = None,
+    cs: Optional[str] = None,
+    advise: Optional[ResolveOut] = None,
     next_wpt: Optional[str] = None
 ) -> bool:
     """Apply validated LLM resolution advice to BlueSky.
@@ -578,6 +765,10 @@ def apply_resolution(
     import time
     
     try:
+        # Legacy/placeholder call: if required context missing, return False gracefully
+        if bs is None or cs is None or advise is None:
+            logger.warning("apply_resolution called without full context; returning False")
+            return False
         if advise.action == "turn":
             heading_deg = advise.params.get("heading_deg")
             if heading_deg is None:
@@ -619,6 +810,20 @@ def apply_resolution(
             logger.info(f"Applied altitude resolution: {cs} to {target_ft} ft")
             return success
             
+        elif advise.action == "waypoint":
+            waypoint_name = advise.params.get("waypoint_name")
+            if not waypoint_name:
+                logger.error("Waypoint action missing waypoint_name parameter")
+                return False
+                
+            # Execute direct-to-waypoint command
+            success = bs.direct_to(cs, waypoint_name)
+            if success:
+                logger.info(f"Applied waypoint resolution: {cs} direct to {waypoint_name}")
+            else:
+                logger.error(f"Failed to send {cs} direct to {waypoint_name}")
+            return success
+            
         else:
             logger.error(f"Unknown resolution action: {advise.action}")
             return False
@@ -641,6 +846,8 @@ def format_resolution_command(cmd: ResolutionCommand) -> str:
         return f"HDG {cmd.target_aircraft} {cmd.new_heading_deg:.0f}"
     elif cmd.resolution_type == ResolutionType.ALTITUDE_CHANGE and cmd.new_altitude_ft:
         return f"ALT {cmd.target_aircraft} {cmd.new_altitude_ft:.0f}"
+    elif cmd.resolution_type == ResolutionType.WAYPOINT_DIRECT and cmd.waypoint_name:
+        return f"DIRECT {cmd.target_aircraft} {cmd.waypoint_name}"
     else:
         return f"# Invalid resolution command for {cmd.target_aircraft}"
 def validate_resolution(
@@ -681,6 +888,8 @@ def to_bluesky_command(
         return to_bluesky_command_altitude(aircraft_id, resolution.new_altitude_ft)
     elif resolution.new_speed_kt is not None:
         return to_bluesky_command_speed(aircraft_id, resolution.new_speed_kt)
+    elif resolution.waypoint_name is not None:
+        return f"{aircraft_id} DCT {resolution.waypoint_name}"
     else:
         return f"# TODO: {aircraft_id}"  # Fallback
 

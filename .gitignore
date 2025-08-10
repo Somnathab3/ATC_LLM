@@ -1,5 +1,39 @@
 /Output
 
+# Output and results directories
+Output/
+outputs/
+baseline_output/
+cli_baseline_output/
+epic_c_demo_output/
+custom_reports/
+reports/
+logs/
+
+# Output directories at workspace root level
+../baseline_output/
+../custom_reports/
+../reports/
+../Tests/
+
+# Debug and temporary files
+*.log
+llm_demo_debug_*.txt
+llm_demo_debug_*.json
+llm_demo_results_*.json
+llm_verification_debug.log
+*_debug_*.txt
+*_results_*.json
+*_output_*.json
+verification_results_*.json
+
+
+# Test results and coverage files
+test_results/
+test_output/
+coverage_reports/
+*_test_results_*.json
+
 # Python cache files - comprehensive patterns
 __pycache__/
 **/__pycache__/
@@ -7,7 +41,7 @@ __pycache__/
 *$py.class
 *.pyc
 *.pyo
-
+    
 # Distribution / packaging
 .Python
 build/

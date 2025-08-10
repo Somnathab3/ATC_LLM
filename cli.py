@@ -13,6 +13,9 @@ Usage:
     atc-llm test --help                # Show testing options
     atc-llm health-check              # Run system health check
     atc-llm start-server              # Start API server
+    atc-llm scat-baseline --help       # Generate SCAT baseline analysis
+    atc-llm scat-llm-run --help        # Run LLM simulation with real-time option
+    atc-llm enhanced-reporting --help  # Run enhanced reporting demonstration
 """
 
 import argparse
@@ -81,6 +84,12 @@ def safe_import(module_name: str, description: str = "module"):
             return main
         elif module_name == "visualize_conflicts":
             from visualize_conflicts import main
+            return main
+        elif module_name == "scat_baseline":
+            from scat_baseline import main
+            return main
+        elif module_name == "scat_llm_run":
+            from scat_llm_run import main
             return main
         else:
             raise ImportError(f"Unknown module: {module_name}")
@@ -429,6 +438,375 @@ def cmd_visualize_conflicts(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_scat_baseline(args: argparse.Namespace) -> int:
+    """Generate SCAT baseline analysis."""
+    setup_logging(args.verbose)
+    
+    # Validate SCAT root directory exists
+    if not validate_path_exists(args.root, "SCAT root directory"):
+        return 1
+    
+    baseline_main = safe_import("scat_baseline", "SCAT baseline module")
+    if not baseline_main:
+        return 1
+    
+    try:
+        print(f"[BASELINE] Generating SCAT baseline analysis...")
+        print(f"   SCAT root: {args.root}")
+        print(f"   Ownship: {args.ownship}")
+        print(f"   Radius: {args.radius}")
+        print(f"   Altitude window: {args.altwin}")
+        
+        # Build command line arguments
+        baseline_args = [
+            'scat_baseline.py',
+            '--root', args.root,
+            '--ownship', args.ownship,
+            '--radius', args.radius,
+            '--altwin', str(args.altwin)
+        ]
+        
+        if args.output:
+            baseline_args.extend(['--output', args.output])
+        if args.verbose:
+            baseline_args.append('--verbose')
+        
+        with argv_context(baseline_args):
+            result = baseline_main()
+        
+        if result == 0:
+            print("[OK] SCAT baseline analysis completed successfully!")
+        else:
+            print("[ERROR] SCAT baseline analysis failed!")
+        return result or 0
+        
+    except Exception as e:
+        print(f"[ERROR] SCAT baseline analysis failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        return 1
+
+
+def cmd_scat_llm_run(args: argparse.Namespace) -> int:
+    """Run SCAT LLM simulation."""
+    setup_logging(args.verbose)
+    
+    # Validate SCAT root directory exists
+    if not validate_path_exists(args.root, "SCAT root directory"):
+        return 1
+    
+    llm_run_main = safe_import("scat_llm_run", "SCAT LLM runner module")
+    if not llm_run_main:
+        return 1
+    
+    try:
+        print(f"[LLM] Starting SCAT LLM simulation...")
+        print(f"   SCAT root: {args.root}")
+        print(f"   Ownship: {args.ownship}")
+        print(f"   Intruders: {args.intruders}")
+        print(f"   Real-time: {args.realtime}")
+        print(f"   Time step: {args.dt_min} minutes")
+        
+        # Build command line arguments
+        llm_args = [
+            'scat_llm_run.py',
+            '--root', args.root,
+            '--ownship', args.ownship,
+            '--intruders', args.intruders,
+            '--dt-min', str(args.dt_min)
+        ]
+        
+        if args.realtime:
+            llm_args.append('--realtime')
+        if args.duration:
+            llm_args.extend(['--duration', str(args.duration)])
+        if args.output:
+            llm_args.extend(['--output', args.output])
+        if args.verbose:
+            llm_args.append('--verbose')
+        
+        with argv_context(llm_args):
+            result = llm_run_main()
+        
+        if result == 0:
+            print("[OK] SCAT LLM simulation completed successfully!")
+        else:
+            print("[ERROR] SCAT LLM simulation failed!")
+        return result or 0
+        
+    except Exception as e:
+        print(f"[ERROR] SCAT LLM simulation failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        return 1
+
+
+def cmd_enhanced_reporting(args: argparse.Namespace) -> int:
+    """Enhanced reporting demonstration command."""
+    print(f"[INFO] Starting Enhanced Reporting Demo...")
+    print(f"[INFO] Flights: {args.flights}, Intruders per flight: {args.intruders}")
+    print(f"[INFO] Output directory: {args.output}")
+    
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+        print("[INFO] Verbose logging enabled")
+    
+    try:
+        # Import required modules
+        from cdr.pipeline import CDRPipeline
+        from cdr.schemas import ConfigurationSettings, MonteCarloParameters
+        from cdr.monte_carlo_intruders import MonteCarloIntruderGenerator
+        from cdr.scat_adapter import SCATAdapter
+        import time
+        from pathlib import Path
+        
+        print("[INFO] Creating configuration...")
+        
+        # Create configuration for enhanced reporting demo
+        config = ConfigurationSettings(
+            # Simulation settings
+            polling_interval_min=1.0,
+            lookahead_time_min=10.0,
+            snapshot_interval_min=0.5,
+            
+            # Intruder detection
+            max_intruders_in_prompt=5,
+            intruder_proximity_nm=100.0,
+            intruder_altitude_diff_ft=5000.0,
+            
+            # Safety parameters
+            min_horizontal_separation_nm=5.0,
+            min_vertical_separation_ft=1000.0,
+            safety_buffer_factor=1.2,
+            
+            # LLM settings
+            llm_enabled=True,
+            llm_model_name="llama-3.1-8b",
+            llm_temperature=0.1,
+            llm_max_tokens=2048,
+            
+            # Resolution parameters
+            max_resolution_angle_deg=45.0,
+            max_altitude_change_ft=2000.0,
+            
+            # Enhanced validation
+            enforce_ownship_only=True,
+            max_climb_rate_fpm=3000.0,
+            max_descent_rate_fpm=2500.0,
+            realistic_turn_rates=True,
+            check_fuel_burn=False,
+            validate_airspace=False
+        )
+        
+        print("[INFO] Initializing pipeline with enhanced reporting...")
+        
+        # Initialize pipeline with enhanced reporting
+        pipeline = CDRPipeline(config)
+        
+        # Initialize SCAT adapter for real flight data
+        scat_adapter = SCATAdapter()
+        available_flights = scat_adapter.get_available_flights()
+        
+        if not available_flights:
+            print("[ERROR] No SCAT flights available. Please check SCAT data.")
+            return 1
+        
+        print(f"[INFO] Found {len(available_flights)} available SCAT flights")
+        
+        # Use first available flights (limit to requested number)
+        selected_flights = available_flights[:args.flights]
+        
+        # Monte Carlo intruder generator
+        mc_generator = MonteCarloIntruderGenerator()
+        
+        # Monte Carlo parameters for varied scenarios
+        mc_params = MonteCarloParameters(
+            num_scenarios=args.flights,
+            intruders_per_scenario=args.intruders,
+            max_spawn_distance_nm=80.0,
+            min_spawn_distance_nm=20.0,
+            altitude_variance_ft=3000.0,
+            speed_variance_kt=100.0,
+            spawn_time_window_min=15.0,
+            conflict_probability=0.7,  # High probability for demonstration
+            realistic_aircraft_types=True,
+            airway_based_generation=False,
+            weather_influence=False
+        )
+        
+        print(f"[INFO] Monte Carlo Parameters: {mc_params.num_scenarios} scenarios, "
+                f"{mc_params.intruders_per_scenario} intruders/scenario")
+        
+        # Generate scenarios with real flight data
+        scenarios = []
+        for i, flight_id in enumerate(selected_flights):
+            flight_record = scat_adapter.get_flight_record(flight_id)
+            if flight_record:
+                scenario = mc_generator.generate_scenario_for_flight(
+                    flight_record, mc_params, f"ENHANCED_DEMO_{i+1:03d}"
+                )
+                scenarios.append(scenario)
+                print(f"[INFO] Generated scenario {scenario.scenario_id} for flight {flight_id}")
+            else:
+                print(f"[WARNING] Could not get flight record for {flight_id}")
+        
+        if not scenarios:
+            print("[ERROR] No scenarios generated. Exiting.")
+            return 1
+        
+        print(f"[INFO] Generated {len(scenarios)} scenarios for demonstration")
+        
+        # Run batch simulation with enhanced reporting
+        print("[INFO] Starting batch simulation with enhanced metrics collection...")
+        start_time = time.time()
+        
+        # Run scenarios
+        for i, scenario in enumerate(scenarios, 1):
+            print(f"[INFO] Running scenario {i}/{len(scenarios)}: {scenario.scenario_id}")
+            
+            # Get flight record
+            flight_record = scat_adapter.get_flight_record(selected_flights[i-1])
+            
+            # Run single scenario
+            metrics = pipeline._run_single_scenario(scenario, flight_record, max_cycles=50)
+            
+            # Log scenario results
+            conflicts_detected = metrics.get('conflicts_detected', 0)
+            successful_resolutions = metrics.get('successful_resolutions', 0)
+            safety_violations = metrics.get('safety_violations', 0)
+            min_separation = metrics.get('minimum_separation_nm', 999.0)
+            
+            print(f"[INFO] Scenario {scenario.scenario_id} completed:")
+            print(f"[INFO]   - Conflicts detected: {conflicts_detected}")
+            print(f"[INFO]   - Successful resolutions: {successful_resolutions}")
+            print(f"[INFO]   - Safety violations: {safety_violations}")
+            print(f"[INFO]   - Minimum separation: {min_separation:.2f} NM")
+            
+            if conflicts_detected > 0:
+                success_rate = (successful_resolutions / conflicts_detected) * 100
+                print(f"[INFO]   - Success rate: {success_rate:.1f}%")
+        
+        simulation_time = time.time() - start_time
+        print(f"[INFO] Batch simulation completed in {simulation_time:.2f} seconds")
+        
+        # Generate enhanced reports
+        print("[INFO] Generating enhanced reports...")
+        csv_path, json_path = pipeline.generate_enhanced_reports(args.output)
+        
+        # Get summary statistics
+        summary_stats = pipeline.get_enhanced_summary_statistics()
+        
+        # Display summary
+        print("=" * 80)
+        print("ENHANCED REPORTING SUMMARY")
+        print("=" * 80)
+        print(f"Total scenarios processed: {summary_stats.get('total_scenarios', 0)}")
+        print(f"Total conflicts detected: {summary_stats.get('total_conflicts', 0)}")
+        print(f"Conflicts resolved: {summary_stats.get('resolved_conflicts', 0)}")
+        print(f"Overall success rate: {summary_stats.get('overall_success_rate', 0):.1f}%")
+        print(f"Average time to action: {summary_stats.get('average_time_to_action_sec', 0):.2f} seconds")
+        print(f"Average minimum separation: {summary_stats.get('average_min_separation_nm', 0):.2f} NM")
+        print(f"Separation violations: {summary_stats.get('separation_violations', 0)}")
+        
+        # Engine usage breakdown
+        engine_usage = summary_stats.get('engine_usage', {})
+        print("Engine Usage Breakdown:")
+        print(f"  - Horizontal: {engine_usage.get('horizontal', 0)}")
+        print(f"  - Vertical: {engine_usage.get('vertical', 0)}")
+        print(f"  - Deterministic: {engine_usage.get('deterministic', 0)}")
+        print(f"  - Fallback: {engine_usage.get('fallback', 0)}")
+        
+        print(f"Average path deviation: {summary_stats.get('average_path_deviation_nm', 0):.2f} NM")
+        print(f"Average resolution effectiveness: {summary_stats.get('average_resolution_effectiveness', 0):.3f}")
+        
+        print("=" * 80)
+        print("REPORT FILES GENERATED")
+        print("=" * 80)
+        print(f"CSV Report: {csv_path}")
+        print(f"JSON Report: {json_path}")
+        print("")
+        print("Features demonstrated:")
+        print("✓ Per-conflict metrics: Resolved(Y/N), Min-sep(NM), Time-to-action, Engine used")
+        print("✓ Per-scenario success rates and comprehensive tracking")
+        print("✓ Waypoint vs heading resolution classification")
+        print("✓ Timing analysis and operational impact assessment")
+        print("✓ CSV/JSON batch run outputs with detailed metrics")
+        print("✓ Reality comparison framework (prepared for SCAT vs BlueSky path analysis)")
+        print("=" * 80)
+        
+        # Clean up
+        pipeline.stop()
+        
+        print("[OK] Enhanced reporting demonstration completed successfully!")
+        return 0
+        
+    except Exception as e:
+        print(f"[ERROR] Enhanced reporting demonstration failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        return 1
+
+
+def cmd_wolfgang_metrics(args: argparse.Namespace) -> int:
+    """Calculate Wolfgang (2011) aviation CDR metrics from CSV data."""
+    setup_logging(args.verbose)
+    
+    try:
+        from src.cdr.wolfgang_metrics import WolfgangMetricsCalculator
+        
+        print(f"[INIT] Starting Wolfgang (2011) metrics calculation...")
+        print(f"   Sep threshold: {args.sep_threshold_nm} NM")
+        print(f"   Alt threshold: {args.alt_threshold_ft} ft")
+        print(f"   Margin: {args.margin_min} min")
+        print(f"   Target separation: {args.sep_target_nm} NM")
+        
+        # Initialize calculator
+        calculator = WolfgangMetricsCalculator(
+            sep_threshold_nm=args.sep_threshold_nm,
+            alt_threshold_ft=args.alt_threshold_ft,
+            margin_min=args.margin_min,
+            sep_target_nm=args.sep_target_nm
+        )
+        
+        # Load input files
+        from pathlib import Path
+        
+        if args.events:
+            calculator.load_events_csv(Path(args.events))
+        if args.baseline_sep:
+            calculator.load_baseline_separation_csv(Path(args.baseline_sep))
+        if args.resolved_sep:
+            calculator.load_resolved_separation_csv(Path(args.resolved_sep))
+        if args.planned_track:
+            calculator.load_planned_track_csv(Path(args.planned_track))
+        if args.resolved_track:
+            calculator.load_resolved_track_csv(Path(args.resolved_track))
+        
+        # Compute metrics
+        calculator.compute_metrics()
+        
+        # Export results
+        output_path = Path(args.output)
+        calculator.export_to_csv(output_path)
+        
+        # Print summary
+        calculator.print_summary()
+        
+        print(f"\n[OK] Wolfgang metrics calculation completed successfully!")
+        print(f"   Results saved to: {output_path}")
+        return 0
+        
+    except Exception as e:
+        print(f"[ERROR] Wolfgang metrics calculation failed: {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        return 1
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create the main argument parser with all subcommands."""
     parser = argparse.ArgumentParser(
@@ -444,6 +822,8 @@ Examples:
   atc-llm compare --scat-path /path/to/scat               # Compare performance
   atc-llm test --coverage                                 # Run tests with coverage
   atc-llm server --port 8080                             # Start API server
+  atc-llm scat-baseline --root /path/to/scat --ownship 100000.json --radius 100nm --altwin 5000
+  atc-llm scat-llm-run --root /path/to/scat --ownship 100000.json --realtime --dt-min 1
         """
     )
     
@@ -563,6 +943,78 @@ Examples:
     viz_parser.add_argument('--data-file', required=True,
                            help='Data file to visualize')
     viz_parser.set_defaults(func=cmd_visualize_conflicts)
+    
+    # SCAT baseline command
+    scat_baseline_parser = subparsers.add_parser('scat-baseline', help='Generate SCAT baseline analysis')
+    scat_baseline_parser.add_argument('--root', required=True,
+                                     help='Root directory containing SCAT files')
+    scat_baseline_parser.add_argument('--ownship', required=True,
+                                     help='Ownship SCAT file (e.g., 100000.json)')
+    scat_baseline_parser.add_argument('--radius', default='100nm',
+                                     help='Search radius (default: 100nm)')
+    scat_baseline_parser.add_argument('--altwin', type=int, default=5000,
+                                     help='Altitude window in feet (default: 5000)')
+    scat_baseline_parser.add_argument('--output',
+                                     help='Output file prefix (default: auto-generated)')
+    scat_baseline_parser.set_defaults(func=cmd_scat_baseline)
+    
+    # SCAT LLM run command
+    scat_llm_parser = subparsers.add_parser('scat-llm-run', help='Run LLM simulation with SCAT data')
+    scat_llm_parser.add_argument('--root', required=True,
+                                help='Root directory containing SCAT files')
+    scat_llm_parser.add_argument('--ownship', required=True,
+                                help='Ownship file or ID')
+    scat_llm_parser.add_argument('--intruders', default='auto',
+                                help='Intruders: "auto" or specific file (default: auto)')
+    scat_llm_parser.add_argument('--realtime', action='store_true',
+                                help='Enable real-time simulation')
+    scat_llm_parser.add_argument('--dt-min', type=float, default=1.0,
+                                help='Time step in minutes (default: 1.0)')
+    scat_llm_parser.add_argument('--duration', type=float,
+                                help='Maximum simulation duration in minutes')
+    scat_llm_parser.add_argument('--output',
+                                help='Output file for results (default: auto-generated)')
+    scat_llm_parser.set_defaults(func=cmd_scat_llm_run)
+    
+    # Enhanced reporting command
+    enhanced_reporting_parser = subparsers.add_parser('enhanced-reporting', 
+                                                     help='Run enhanced reporting demonstration')
+    enhanced_reporting_parser.add_argument('--flights', type=int, default=3,
+                                          help='Number of flights to simulate (default: 3)')
+    enhanced_reporting_parser.add_argument('--intruders', type=int, default=5,
+                                          help='Number of intruders per flight (default: 5)')
+    enhanced_reporting_parser.add_argument('--output', default='reports/enhanced_demo',
+                                          help='Output directory for reports (default: reports/enhanced_demo)')
+    enhanced_reporting_parser.add_argument('--verbose', action='store_true',
+                                          help='Enable verbose logging')
+    enhanced_reporting_parser.set_defaults(func=cmd_enhanced_reporting)
+    
+    # Wolfgang metrics command
+    wolfgang_parser = subparsers.add_parser('wolfgang-metrics', 
+                                           help='Calculate Wolfgang (2011) aviation CDR metrics')
+    wolfgang_parser.add_argument('--events', type=str,
+                                help='events.csv file path')
+    wolfgang_parser.add_argument('--baseline-sep', type=str,
+                                help='baseline_sep.csv file path')
+    wolfgang_parser.add_argument('--resolved-sep', type=str,
+                                help='resolved_sep.csv file path')
+    wolfgang_parser.add_argument('--planned-track', type=str,
+                                help='planned_track.csv file path')
+    wolfgang_parser.add_argument('--resolved-track', type=str,
+                                help='resolved_track.csv file path')
+    wolfgang_parser.add_argument('--output', type=str, default='metrics_wolfgang.csv',
+                                help='Output CSV file path (default: metrics_wolfgang.csv)')
+    wolfgang_parser.add_argument('--sep-threshold-nm', type=float, default=5.0,
+                                help='Horizontal LoS threshold in NM (default: 5.0)')
+    wolfgang_parser.add_argument('--alt-threshold-ft', type=float, default=1000.0,
+                                help='Vertical LoS threshold in feet (default: 1000.0)')
+    wolfgang_parser.add_argument('--margin-min', type=float, default=5.0,
+                                help='Time margin for alerting in minutes (default: 5.0)')
+    wolfgang_parser.add_argument('--sep-target-nm', type=float, default=5.0,
+                                help='Target separation for RE normalization in NM (default: 5.0)')
+    wolfgang_parser.add_argument('--verbose', action='store_true',
+                                help='Enable verbose logging')
+    wolfgang_parser.set_defaults(func=cmd_wolfgang_metrics)
     
     return parser
 

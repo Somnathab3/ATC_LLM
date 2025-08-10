@@ -206,14 +206,20 @@ class TestResolutionValidation:
     
     def test_validate_resolution_safe(self):
         """Test validation of safe resolution."""
+        from src.cdr.schemas import ResolutionEngine
         resolution = ResolutionCommand(
             resolution_id="TEST_RES_001",
             target_aircraft="OWNSHIP",
             resolution_type=ResolutionType.HEADING_CHANGE,
+            source_engine=ResolutionEngine.HORIZONTAL,
             new_heading_deg=120.0,
             issue_time=datetime.now(),
             is_validated=False,
-            safety_margin_nm=2.0
+            safety_margin_nm=2.0,
+            is_ownship_command=True,
+            angle_within_limits=True,
+            altitude_within_limits=True,
+            rate_within_limits=True
         )
         
         ownship = AircraftState(
@@ -238,10 +244,12 @@ class TestResolutionValidation:
     def test_validate_resolution_unsafe(self):
         """Test validation rejection of unsafe resolution."""
         # Create an obviously unsafe resolution (too extreme turn)
+        from src.cdr.schemas import ResolutionEngine
         resolution = ResolutionCommand(
             resolution_id="UNSAFE_RES",
             target_aircraft="OWNSHIP",
             resolution_type=ResolutionType.HEADING_CHANGE,
+            source_engine=ResolutionEngine.HORIZONTAL,  # Add required field
             new_heading_deg=270.0,  # 180deg turn - very extreme
             issue_time=datetime.now(),
             is_validated=False,

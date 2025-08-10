@@ -25,7 +25,7 @@ from typing import Dict, List, Any, Optional, Tuple
 # Add source directory to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.cdr.enhanced_llm_client import EnhancedLLMClient
+from src.cdr.llm_client import LlamaClient
 from src.cdr.scat_adapter import SCATAdapter
 from src.cdr.schemas import AircraftState, ConfigurationSettings, ConflictPrediction
 from src.cdr.bluesky_io import BlueSkyClient
@@ -75,7 +75,7 @@ class LLMCommunicationVerifier:
             os.makedirs(scat_dataset_path, exist_ok=True)
         
         self.scat_adapter = SCATAdapter(scat_dataset_path)
-        self.enhanced_llm_client = EnhancedLLMClient(self.config)
+        self.llm_client = LlamaClient(self.config)
         
         # Ollama host and timeout for direct API calls
         self.ollama_host = "http://127.0.0.1:11434"
@@ -96,7 +96,7 @@ class LLMCommunicationVerifier:
         os.environ["LLM_STRICT_VERIFY"] = "1"
         
         # Update client config
-        self.enhanced_llm_client.use_mock = False
+        self.llm_client.use_mock = False
         
         logger.info("[OK] All mock modes forcibly disabled - REAL LLM ONLY")
     
@@ -145,7 +145,7 @@ Replace "current_time" with actual current time. This verifies you are a real LL
             start_time = time.time()
             
             # Use direct Ollama API call
-            response_data = self.enhanced_llm_client._post_ollama(test_prompt)
+            response_data = self.llm_client._post_ollama(test_prompt)
             
             end_time = time.time()
             response_time = end_time - start_time
@@ -233,19 +233,42 @@ Replace "current_time" with actual current time. This verifies you are a real LL
             
             logger.info(f"[TARGET] Analyzing conflicts for {ownship.callsign} vs {len(traffic)} traffic aircraft")
             
-            # Build enhanced prompt
+            # Create mock input data structure for LLM
+            class MockOwnship:
+                def __init__(self, state):
+                    self.callsign = state.callsign
+                    self.lat = state.latitude  # Map to expected LLM attribute name
+                    self.lon = state.longitude
+                    self.alt = state.altitude_ft
+                    self.hdg = state.heading_deg
+                    self.tas = state.ground_speed_kt
+                    self.vs = state.vertical_speed_fpm
+                    
+            class MockTraffic:
+                def __init__(self, state):
+                    self.callsign = state.callsign
+                    self.lat = state.latitude  # Map to expected LLM attribute name
+                    self.lon = state.longitude
+                    self.alt = state.altitude_ft
+                    self.hdg = state.heading_deg
+                    self.tas = state.ground_speed_kt
+                    self.vs = state.vertical_speed_fpm
+            
+            mock_ownship = MockOwnship(ownship)
+            mock_traffic = [MockTraffic(traffic_ac) for traffic_ac in traffic]
+            
+            # Use public LLM client method instead of protected _post_ollama
+            logger.info("[DETECT] Calling LLM for conflict detection using enhanced mode...")
             start_time = time.time()
-            detection_prompt = self.enhanced_llm_client.build_enhanced_detect_prompt(
-                ownship, traffic, self.config
-            )
             
-            logger.debug(f"[PROMPT] Detection prompt length: {len(detection_prompt)} characters")
-            if self.debug_mode:
-                logger.debug(f"Detection prompt preview: {detection_prompt[:300]}...")
+            # Create a mock input data structure that LLM client expects
+            mock_input = type('MockInput', (), {
+                'ownship': mock_ownship,
+                'traffic': mock_traffic,
+                'lookahead_minutes': 10
+            })()
             
-            # Call LLM for conflict detection
-            logger.info("[DETECT] Calling LLM for conflict detection...")
-            detection_response = self.enhanced_llm_client._post_ollama(detection_prompt)
+            detection_response = self.llm_client.detect_conflicts(mock_input, use_enhanced=True)
             
             end_time = time.time()
             detection_time = end_time - start_time
@@ -260,6 +283,7 @@ Replace "current_time" with actual current time. This verifies you are a real LL
             
             # If conflicts detected, get resolution
             resolution_response = None
+            resolution_time = 0.0
             if detection_response.get("conflict", False):
                 logger.info("[WARN] Conflicts detected, requesting resolution from LLM...")
                 
@@ -279,14 +303,13 @@ Replace "current_time" with actual current time. This verifies you are a real LL
                     confidence=0.9
                 )
                 
+                # Use public LLM method for resolution
+                logger.info("[RESOLVE] Calling LLM for conflict resolution...")
                 start_time = time.time()
-                resolution_prompt = self.enhanced_llm_client.build_enhanced_resolve_prompt(
-                    ownship, [mock_conflict], self.config
-                )
                 
-                logger.debug(f"[PROMPT] Resolution prompt length: {len(resolution_prompt)} characters")
+                # Use the public generate_resolution method
+                resolution_response = self.llm_client.generate_resolution(detection_response, self.config, use_enhanced=True)
                 
-                resolution_response = self.enhanced_llm_client._post_ollama(resolution_prompt)
                 end_time = time.time()
                 resolution_time = end_time - start_time
                 
@@ -302,7 +325,6 @@ Replace "current_time" with actual current time. This verifies you are a real LL
                     "altitude_ft": ownship.altitude_ft
                 },
                 "traffic_count": len(traffic),
-                "detection_prompt_length": len(detection_prompt),
                 "detection_response": detection_response,
                 "detection_time_sec": detection_time,
                 "resolution_response": resolution_response,
@@ -385,11 +407,11 @@ Replace "current_time" with actual current time. This verifies you are a real LL
                     commands.append(cmd)
                     logger.info(f"[OK] Generated speed command: {cmd}")
             
-            # Use enhanced LLM client's parsing if available
-            if hasattr(self.enhanced_llm_client, '_sanitize_bluesky_command'):
+            # Use LLM client's parsing if available
+            if hasattr(self.llm_client, '_sanitize_bluesky_command'):
                 sanitized_commands = []
                 for cmd in commands:
-                    sanitized = self.enhanced_llm_client._sanitize_bluesky_command(cmd)
+                    sanitized = self.llm_client._sanitize_bluesky_command(cmd)
                     sanitized_commands.append(sanitized)
                     logger.info(f"[CLEAN] Sanitized command: {cmd} -> {sanitized}")
                 commands = sanitized_commands
