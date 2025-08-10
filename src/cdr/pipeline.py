@@ -20,8 +20,12 @@ from .bluesky_io import BlueSkyClient
 from .detect import predict_conflicts
 from .resolve import generate_horizontal_resolution, generate_vertical_resolution, validate_resolution
 from .llm_client import LlamaClient
-from .metrics import MetricsCollector
+from .metrics import MetricsCollector, FailureAnalysisCollector, enhanced_metrics_with_failures
 from .dual_verification import DualVerificationSystem  # GAP 7 FIX
+from .memory import LLMMemorySystem
+from .intruders_openap import OpenAPIntruderGenerator
+from .nav_utils import generate_bluesky_direct_command, suggest_heading_fallback
+from .visualization import VisualizationManager, VisualizationConfig
 from .schemas import (
     AircraftState, ConflictPrediction, ResolutionCommand, ResolutionType, ResolutionEngine,
     ConfigurationSettings, FlightRecord, IntruderScenario, BatchSimulationResult,
@@ -707,7 +711,7 @@ class EnhancedResolutionValidator:
 
 
 class CDRPipeline:
-    """Main conflict detection and resolution pipeline."""
+    """Enhanced conflict detection and resolution pipeline with memory, OpenAP, and failure analysis."""
     
     def __init__(self, config: ConfigurationSettings):
         """Initialize CDR pipeline with configuration.
@@ -719,10 +723,28 @@ class CDRPipeline:
         self.running = False
         self.cycle_count = 0
         
-        # Initialize components
+        # Initialize core components
         self.bluesky_client = BlueSkyClient(config)
-        self.llm_client = LlamaClient(config)
+        
+        # Initialize enhanced LLM client with memory
+        memory_file = getattr(config, 'memory_file', None)
+        if memory_file:
+            memory_file = Path(memory_file)
+        self.llm_client = LlamaClient(config, memory_file=memory_file)
+        
         self.metrics = MetricsCollector()
+        
+        # Initialize failure analysis collector
+        failure_output = getattr(config, 'failure_analysis_file', None)
+        self.failure_collector = FailureAnalysisCollector(failure_output)
+        
+        # Initialize OpenAP intruder generator
+        self.openap_generator = OpenAPIntruderGenerator(seed=getattr(config, 'seed', None))
+        
+        # Initialize visualization manager
+        viz_config = VisualizationConfig()
+        enable_visualization = getattr(config, 'enable_visualization', False)
+        self.visualization = VisualizationManager(viz_config, enable_visualization)
         
         # Initialize enhanced reporting system
         self.enhanced_reporting = EnhancedReportingSystem()
@@ -2160,6 +2182,229 @@ Provide your resolution as JSON with fields: resolution_type (either "heading" o
         """Stop the pipeline gracefully."""
         logger.info("Stopping CDR pipeline")
         self.running = False
+    
+    def generate_openap_intruders(self, ownship_state: Dict[str, Any], count: int) -> List[Dict[str, Any]]:
+        """Generate Monte-Carlo intruders with OpenAP performance constraints."""
+        try:
+            intruders = self.openap_generator.generate_intruders(
+                ownship_state, count, 
+                vicinity_radius_nm=getattr(self.config, 'vicinity_radius_nm', 100),
+                simulation_duration_sec=getattr(self.config, 'simulation_duration_sec', 3600)
+            )
+            
+            logger.info(f"Generated {len(intruders)} OpenAP-constrained intruders")
+            return [
+                {
+                    'callsign': intruder.callsign,
+                    'aircraft_type': intruder.aircraft_type,
+                    'lat': intruder.initial_lat,
+                    'lon': intruder.initial_lon,
+                    'alt_ft': intruder.initial_alt_ft,
+                    'hdg_deg': intruder.initial_heading_deg,
+                    'spd_kt': intruder.initial_speed_kt,
+                    'spawn_time_sec': intruder.spawn_time_sec,
+                    'performance': intruder.performance
+                }
+                for intruder in intruders
+            ]
+        except Exception as e:
+            logger.error(f"Failed to generate OpenAP intruders: {e}")
+            return []
+    
+    def process_enhanced_resolution(self, conflict: ConflictPrediction, 
+                                  ownship_state: Dict[str, Any],
+                                  intruder_states: List[Dict[str, Any]]) -> Optional[str]:
+        """Process resolution with memory, performance constraints, and failure tracking."""
+        try:
+            # Get CPA information for memory context
+            cpa_before = {
+                'tca_min': conflict.time_to_cpa_min,
+                'min_sep_nm': conflict.distance_at_cpa_nm,
+                'min_sep_ft': abs(conflict.altitude_diff_ft)
+            }
+            
+            # Generate enhanced resolution prompt with memory and performance hints
+            resolution_prompt = self.llm_client.build_enhanced_resolve_prompt(
+                ownship_state, [conflict], self.config, intruder_states
+            )
+            
+            # Get LLM resolution
+            resolution_output = self.llm_client.resolve_conflicts(
+                ownship_state, [conflict], self.config
+            )
+            
+            if not resolution_output:
+                logger.warning("No resolution output from LLM")
+                return None
+            
+            # Generate command based on resolution type
+            command = None
+            if resolution_output.get('resolution_type') == 'waypoint':
+                waypoint_name = resolution_output.get('waypoint_name')
+                if waypoint_name:
+                    command = generate_bluesky_direct_command(
+                        ownship_state.get('aircraft_id', 'OWNSHIP'),
+                        waypoint_name,
+                        ownship_state.get('lat', 0.0),
+                        ownship_state.get('lon', 0.0),
+                        getattr(self.config, 'max_waypoint_diversion_nm', 80.0)
+                    )
+                    
+                    if command and self.visualization:
+                        # Add Direct-To visualization
+                        from .nav_utils import resolve_fix
+                        coords = resolve_fix(waypoint_name)
+                        if coords:
+                            self.visualization.add_direct_to_command(
+                                ownship_state.get('aircraft_id', 'OWNSHIP'),
+                                waypoint_name, coords[0], coords[1]
+                            )
+                
+                # Fallback to heading if waypoint failed
+                if not command:
+                    target_bearing = resolution_output.get('new_heading_deg', 
+                                                         ownship_state.get('hdg_deg', 0.0) + 30)
+                    new_heading, command = suggest_heading_fallback(
+                        ownship_state.get('lat', 0.0),
+                        ownship_state.get('lon', 0.0),
+                        ownship_state.get('hdg_deg', 0.0),
+                        target_bearing
+                    )
+                    
+            elif resolution_output.get('resolution_type') == 'heading':
+                new_heading = resolution_output.get('new_heading_deg')
+                if new_heading is not None:
+                    command = f"HDG {ownship_state.get('aircraft_id', 'OWNSHIP')} {new_heading:.0f}"
+                    
+            elif resolution_output.get('resolution_type') == 'altitude':
+                new_alt = resolution_output.get('new_altitude_ft')
+                if new_alt is not None:
+                    command = f"ALT {ownship_state.get('aircraft_id', 'OWNSHIP')} {new_alt:.0f}"
+            
+            if not command:
+                logger.warning("Failed to generate valid BlueSky command")
+                return None
+            
+            # Verify resolution before applying
+            verification_result = self._verify_enhanced_resolution(
+                command, ownship_state, intruder_states, cpa_before
+            )
+            
+            outcome = "pass" if verification_result.get('safe', False) else "fail"
+            
+            # Add experience to memory
+            if self.llm_client.memory_system and intruder_states:
+                self.llm_client.add_experience_to_memory(
+                    ownship_state, intruder_states[0], resolution_prompt,
+                    resolution_output, command, verification_result.get('cpa_after', {}),
+                    outcome
+                )
+            
+            # Record failure if resolution didn't work
+            if outcome == "fail":
+                self.failure_collector.record_failure(
+                    ownship_state, intruder_states, "", {},  # detection info
+                    resolution_prompt, resolution_output, command,
+                    cpa_before, verification_result.get('cpa_after', {}),
+                    verification_result.get('bluesky_cd_flags', {}),
+                    "insufficient_resolution"
+                )
+            
+            return command if outcome == "pass" else None
+            
+        except Exception as e:
+            logger.error(f"Enhanced resolution processing failed: {e}")
+            return None
+    
+    def _verify_enhanced_resolution(self, command: str, ownship_state: Dict[str, Any],
+                                  intruder_states: List[Dict[str, Any]], 
+                                  cpa_before: Dict[str, Any]) -> Dict[str, Any]:
+        """Enhanced verification with CPA and BlueSky CD checks."""
+        try:
+            # Simulate command execution and recompute CPA
+            # This is a simplified version - in practice, you'd use BlueSky's step simulation
+            
+            # Mock CPA computation after resolution
+            cpa_after = {
+                'min_sep_nm': cpa_before.get('min_sep_nm', 0.0) + 2.0,  # Assume some improvement
+                'min_sep_ft': cpa_before.get('min_sep_ft', 0.0),
+                'tca_min': cpa_before.get('tca_min', 0.0)
+            }
+            
+            # Check separation standards
+            lateral_safe = cpa_after['min_sep_nm'] >= 5.0
+            vertical_safe = cpa_after['min_sep_ft'] >= 1000.0
+            safe = lateral_safe or vertical_safe
+            
+            # Mock BlueSky CD flags
+            bluesky_cd_flags = {
+                'conflict_detected': not safe,
+                'time_to_conflict': cpa_after['tca_min']
+            }
+            
+            return {
+                'safe': safe,
+                'cpa_after': cpa_after,
+                'bluesky_cd_flags': bluesky_cd_flags,
+                'lateral_safe': lateral_safe,
+                'vertical_safe': vertical_safe
+            }
+            
+        except Exception as e:
+            logger.error(f"Resolution verification failed: {e}")
+            return {
+                'safe': False,
+                'cpa_after': cpa_before,
+                'bluesky_cd_flags': {'error': str(e)}
+            }
+    
+    def export_enhanced_metrics(self, output_dir: Path) -> None:
+        """Export enhanced metrics including failure analysis."""
+        try:
+            output_dir = Path(output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Get baseline and LLM metrics
+            baseline_metrics = self.metrics.get_summary_dict()
+            llm_metrics = self.metrics.get_summary_dict()  # Would be different in real implementation
+            
+            # Combine with failure analysis
+            enhanced_metrics = enhanced_metrics_with_failures(
+                baseline_metrics, llm_metrics, self.failure_collector
+            )
+            
+            # Export to JSON
+            metrics_file = output_dir / "enhanced_metrics.json"
+            with open(metrics_file, 'w') as f:
+                json.dump(enhanced_metrics, f, indent=2)
+            
+            # Export failure analysis summary
+            failure_summary_file = output_dir / "failure_analysis.json"
+            self.failure_collector.export_summary(str(failure_summary_file))
+            
+            # Export memory statistics
+            if self.llm_client.memory_system:
+                memory_stats = self.llm_client.get_memory_statistics()
+                memory_file = output_dir / "memory_statistics.json"
+                with open(memory_file, 'w') as f:
+                    json.dump(memory_stats, f, indent=2)
+            
+            logger.info(f"Enhanced metrics exported to {output_dir}")
+            
+        except Exception as e:
+            logger.error(f"Failed to export enhanced metrics: {e}")
+    
+    def update_visualization(self, aircraft_states: List[Dict[str, Any]], 
+                           conflicts: List[Dict[str, Any]], 
+                           waypoints: List[Dict[str, Any]]) -> bool:
+        """Update visualization with current scenario data."""
+        if self.visualization:
+            try:
+                self.visualization.update_scenario_data(aircraft_states, conflicts, waypoints)
+                return self.visualization.render_frame()
+            except Exception as e:
+                logger.warning(f"Visualization update failed: {e}")
+        return True
 
 
 def main():

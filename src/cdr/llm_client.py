@@ -6,6 +6,8 @@ This module provides:
 - Structured prompts with clear constraints and expected formats
 - Error handling and fallback mechanisms
 - Backward compatibility for existing tests
+- Memory-enhanced prompts with experience library integration
+- OpenAP performance constraints in resolution prompts
 """
 
 import os
@@ -17,6 +19,7 @@ from typing import List, Dict, Any, Union
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 from types import SimpleNamespace
+from pathlib import Path
 
 # Import guard for requests - use lazy import to prevent test failures
 try:
@@ -26,6 +29,22 @@ except ImportError:
     requests = None
     REQUESTS_AVAILABLE = False
     logging.warning("requests not available - using mock mode")
+
+# Memory system import
+try:
+    from .memory import LLMMemorySystem
+    MEMORY_AVAILABLE = True
+except ImportError:
+    MEMORY_AVAILABLE = False
+    logging.warning("Memory system not available")
+
+# OpenAP integration import
+try:
+    from .intruders_openap import OpenAPIntruderGenerator
+    OPENAP_INTEGRATION_AVAILABLE = True
+except ImportError:
+    OPENAP_INTEGRATION_AVAILABLE = False
+    logging.warning("OpenAP integration not available")
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +83,7 @@ class LlamaClient:
         host: str | None = None,
         timeout: int | None = None,
         use_mock: bool | None = None,
+        memory_file: Optional[Path] = None,
     ) -> None:
         # Handle config object passed from tests
         if config is not None:
@@ -77,6 +97,8 @@ class LlamaClient:
             # Additional attributes expected by tests
             self.temperature = getattr(config, "llm_temperature", 0.2)
             self.max_tokens = getattr(config, "llm_max_tokens", 2048)
+            # Memory system configuration
+            memory_file = getattr(config, "memory_file", None) or memory_file
         else:
             self.config = None
             # defaults the tests expect
@@ -92,6 +114,24 @@ class LlamaClient:
                 self.use_mock = env_disabled
             self.temperature = 0.2
             self.max_tokens = 2048
+        
+        # Initialize memory system
+        self.memory_system = None
+        if MEMORY_AVAILABLE and memory_file:
+            try:
+                self.memory_system = LLMMemorySystem(memory_file)
+                logger.info(f"Initialized LLM memory system with file: {memory_file}")
+            except Exception as e:
+                logger.warning(f"Failed to initialize memory system: {e}")
+        
+        # Initialize OpenAP integration
+        self.openap_generator = None
+        if OPENAP_INTEGRATION_AVAILABLE:
+            try:
+                self.openap_generator = OpenAPIntruderGenerator()
+                logger.info("Initialized OpenAP integration for performance constraints")
+            except Exception as e:
+                logger.warning(f"Failed to initialize OpenAP integration: {e}")
 
     # ---------- ENHANCED PROMPT BUILDERS ----------
     
@@ -111,8 +151,8 @@ class LlamaClient:
             "Only JSON. No extra text."
         )
     
-    def build_enhanced_detect_prompt(self, ownship, traffic: List, config) -> str:
-        """Build standardized conflict detection prompt based on aviation standards."""
+    def build_enhanced_detect_prompt(self, ownship, traffic: List, config, cpa_hints: Optional[List] = None) -> str:
+        """Build standardized conflict detection prompt with memory and CPA hints."""
         from .schemas import AircraftState, ConfigurationSettings
         
         # Handle mixed input types
@@ -129,6 +169,109 @@ class LlamaClient:
             }
         else:
             ownship_data = ownship
+        
+        # Get memory context if available
+        past_movements = []
+        experience_examples = []
+        if self.memory_system and traffic:
+            try:
+                # Get recent movements
+                past_movements = self.memory_system.get_recent_movements(limit=5)
+                
+                # Get similar experiences for the first intruder
+                if traffic:
+                    intruder = traffic[0]
+                    # Mock CPA result for memory retrieval
+                    mock_cpa = cpa_hints[0] if cpa_hints else {
+                        'tca_min': 999.0, 'min_sep_nm': 0.0, 'min_sep_ft': 0.0
+                    }
+                    experience_examples = self.memory_system.retrieve_similar_experiences(
+                        ownship_data, intruder, mock_cpa, top_k=3
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to retrieve memory context: {e}")
+        
+        # Format traffic info
+        traffic_info = []
+        for i, aircraft in enumerate(traffic):
+            if isinstance(aircraft, dict):
+                traffic_info.append(f"""
+    Aircraft {i+1}:
+    - Callsign: {aircraft.get('callsign', aircraft.get('aircraft_id', 'UNKNOWN'))}
+    - Position: {aircraft.get('lat', 0.0):.6f}°N, {aircraft.get('lon', 0.0):.6f}°E
+    - Altitude: {aircraft.get('alt_ft', 0.0):.0f} ft
+    - Heading: {aircraft.get('hdg_deg', 0.0):.0f}°
+    - Speed: {aircraft.get('spd_kt', 0.0):.0f} kt""")
+            else:
+                traffic_info.append(f"    Aircraft {i+1}: {aircraft}")
+        
+        # Format CPA hints if available
+        cpa_info = ""
+        if cpa_hints:
+            cpa_details = []
+            for hint in cpa_hints:
+                if isinstance(hint, dict):
+                    pair = hint.get('pair', ['OWN', 'UNKNOWN'])
+                    tca = hint.get('tca_min', 999.0)
+                    dmin = hint.get('dmin_nm', 999.0)
+                    dv = hint.get('dv_ft', 999.0)
+                    cpa_details.append(f"    {pair[0]} vs {pair[1]}: TCA={tca:.1f}min, MinSep={dmin:.1f}NM/{dv:.0f}ft")
+            if cpa_details:
+                cpa_info = f"\n\nCPA ANALYSIS:\n" + "\n".join(cpa_details)
+        
+        # Format memory context
+        memory_context = ""
+        if past_movements or experience_examples:
+            memory_context = "\n\nMEMORY CONTEXT:"
+            
+            if past_movements:
+                memory_context += "\n\nRecent Movements:"
+                for movement in past_movements:
+                    memory_context += f"\n    - {movement['type'].title()} maneuver: {movement['result']} ({movement.get('timestamp', 'recent')})"
+            
+            if experience_examples:
+                memory_context += "\n\nSimilar Past Experiences:"
+                for i, exp in enumerate(experience_examples):
+                    situation = exp['situation']
+                    outcome = exp['outcome']
+                    memory_context += f"\n    Example {i+1}: Rel.bearing={situation['relative_bearing_deg']:.0f}°, "
+                    memory_context += f"Closure={situation['closure_rate_kt']:.0f}kt → {outcome['result']} "
+                    memory_context += f"(MinSep={outcome['min_sep_nm']:.1f}NM)"
+        
+        # Build the prompt
+        prompt = f"""You are an expert Air Traffic Controller analyzing potential conflicts.
+
+Apply FAA separation standards (5 NM lateral / 1000 ft vertical) with a 10-minute horizon.
+Focus on conflicts within the next 5 minutes for immediate action.
+
+OWNSHIP STATE:
+- Position: {ownship_data.get('lat', ownship_data.get('latitude', 0.0)):.6f}°N, {ownship_data.get('lon', ownship_data.get('longitude', 0.0)):.6f}°E
+- Altitude: {ownship_data.get('alt_ft', ownship_data.get('altitude_ft', 0.0)):.0f} ft
+- Heading: {ownship_data.get('hdg_deg', ownship_data.get('heading_deg', 0.0)):.0f}°
+- Speed: {ownship_data.get('spd_kt', ownship_data.get('ground_speed_kt', 0.0)):.0f} kt
+
+TRAFFIC IN VICINITY:
+{chr(10).join(traffic_info) if traffic_info else "    No traffic detected"}
+{cpa_info}
+{memory_context}
+
+ANALYSIS REQUIREMENTS:
+- 10-minute horizon for trajectory prediction
+- 5-minute alert window for immediate conflicts
+- Consider closure rates, altitude differences, and traffic patterns
+- Use past experience and recent movements to inform assessment
+
+Return STRICT JSON:
+{{
+    "conflict_with": ["callsign1", "callsign2", ...],
+    "within_alert_window": true/false,
+    "rule": "5NM/1000FT",
+    "justification": "Clear reasoning based on separation standards and trajectory analysis"
+}}
+
+IMPORTANT: Return only JSON. No additional text or explanations outside the JSON structure."""
+        
+        return prompt
         
         # Handle config parameter types
         if hasattr(config, 'min_horizontal_separation_nm'):
@@ -227,8 +370,8 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
             "Only JSON. No extra text."
         )
     
-    def build_enhanced_resolve_prompt(self, ownship, conflicts: List, config) -> str:
-        """Build standardized conflict resolution prompt based on aviation best practices."""
+    def build_enhanced_resolve_prompt(self, ownship, conflicts: List, config, intruder_states: Optional[List] = None) -> str:
+        """Build standardized conflict resolution prompt with memory and performance constraints."""
         from .schemas import AircraftState, ConflictPrediction, ConfigurationSettings
         from .nav_utils import nearest_fixes
         
@@ -246,18 +389,51 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
             max_alt_change = 2000
             max_waypoint_diversion = 80.0
         
-        # Get ownship position for waypoint suggestions
+        # Get ownship position and aircraft type
         if hasattr(ownship, 'latitude'):
             ownship_lat, ownship_lon = ownship.latitude, ownship.longitude
+            ownship_alt = ownship.altitude_ft
+            ownship_type = getattr(ownship, 'aircraft_type', 'b737')
         elif isinstance(ownship, dict):
             ownship_lat = ownship.get('lat', ownship.get('latitude', 0.0))
             ownship_lon = ownship.get('lon', ownship.get('longitude', 0.0))
+            ownship_alt = ownship.get('alt_ft', ownship.get('altitude_ft', 35000.0))
+            ownship_type = ownship.get('aircraft_type', 'b737')
         else:
-            ownship_lat, ownship_lon = 0.0, 0.0
+            ownship_lat, ownship_lon, ownship_alt, ownship_type = 0.0, 0.0, 35000.0, 'b737'
+        
+        # Get OpenAP performance constraints for ownship
+        performance_hints = {}
+        if self.openap_generator:
+            try:
+                performance_hints = self.openap_generator.get_performance_hints_for_llm(
+                    ownship_type, ownship_alt
+                )
+            except Exception as e:
+                logger.warning(f"Failed to get performance hints: {e}")
         
         # Get nearby waypoint suggestions to reduce hallucination
         suggestions = nearest_fixes(ownship_lat, ownship_lon, k=3, max_dist_nm=max_waypoint_diversion)
         suggest_txt = "\n".join([f"- {f['name']} ({f['dist_nm']:.1f} NM)" for f in suggestions]) or "- (none nearby)"
+        
+        # Get memory context if available
+        past_movements = []
+        experience_examples = []
+        if self.memory_system and intruder_states:
+            try:
+                # Get recent movements
+                past_movements = self.memory_system.get_recent_movements(limit=5)
+                
+                # Get similar experiences for the first conflicting intruder
+                if intruder_states:
+                    intruder = intruder_states[0]
+                    # Mock CPA result for memory retrieval
+                    mock_cpa = {'tca_min': 5.0, 'min_sep_nm': 3.0, 'min_sep_ft': 500.0}
+                    experience_examples = self.memory_system.retrieve_similar_experiences(
+                        ownship, intruder, mock_cpa, top_k=3
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to retrieve memory context: {e}")
         
         # Format conflicts for clear understanding
         conflicts_info = []
@@ -279,25 +455,99 @@ CONFLICT {i+1}:
 - Intruder: {conflict.get('intruder_id', 'UNKNOWN')}
 - Details: {json.dumps(conflict)}""")
         
+        # Format performance constraints
+        performance_info = ""
+        if performance_hints:
+            speed_range = performance_hints.get('speed_range_kt', {})
+            climb_limits = performance_hints.get('climb_limits', {})
+            maneuvering = performance_hints.get('maneuvering', {})
+            
+            performance_info = f"""
+AIRCRAFT PERFORMANCE LIMITS (OpenAP - {performance_hints.get('aircraft_type', 'Unknown')}):
+- Speed range: {speed_range.get('min', 250):.0f} - {speed_range.get('max', 500):.0f} knots
+- Max climb rate: {climb_limits.get('max_rate_fpm', 2000):.0f} fpm
+- Max descent rate: {climb_limits.get('max_descent_fpm', 3000):.0f} fpm
+- Max bank angle: {maneuvering.get('max_bank_deg', 30):.0f}°
+- Max turn rate: {maneuvering.get('max_turn_rate_deg_sec', 2.0):.1f}°/sec
+- Current altitude: {ownship_alt:.0f} ft"""
+        
+        # Format memory context
+        memory_context = ""
+        if past_movements or experience_examples:
+            memory_context = "\n\nMEMORY CONTEXT:"
+            
+            if past_movements:
+                memory_context += "\n\nRecent Movements (this flight):"
+                for movement in past_movements:
+                    result_emoji = "✓" if movement['result'] == 'pass' else "✗"
+                    memory_context += f"\n    {result_emoji} {movement['type'].title()}: {movement.get('details', {}).get('reason', 'No details')}"
+            
+            if experience_examples:
+                memory_context += "\n\nSimilar Past Experiences:"
+                for i, exp in enumerate(experience_examples):
+                    situation = exp['situation']
+                    action = exp['action']
+                    outcome = exp['outcome']
+                    result_emoji = "✓" if outcome['result'] == 'pass' else "✗"
+                    memory_context += f"\n    {result_emoji} Similar geometry: {action.get('action', 'unknown')} → "
+                    memory_context += f"MinSep={outcome['min_sep_nm']:.1f}NM (similarity={exp['similarity']:.2f})"
+        
         ownship_info = self._format_aircraft_state(ownship, "OWNSHIP")
         
         prompt = f"""You are an expert Air Traffic Controller providing conflict resolution.
+
+Propose ONE ownship action that preserves ≥5 NM/1000 ft separation and maintains progress to destination.
+Prefer Direct-To a valid nearby waypoint. Respect OpenAP performance limits.
+Consider past movements and experience examples.
 
 SITUATION:
 {ownship_info}
 
 CONFLICTS DETECTED:
 {chr(10).join(conflicts_info)}
+{performance_info}
 
 RESOLUTION CONSTRAINTS:
-- Maximum heading change: {max_angle}deg
+- Maximum heading change: {max_angle}°
 - Minimum altitude change: 1000 feet
 - Maximum altitude change: {max_alt_change} feet
 - Must maintain destination track efficiency
 - Prioritize horizontal resolutions over vertical when possible
-- Consider traffic flow and airspace restrictions
+- Respect aircraft performance envelopes
 
 RESOLUTION TYPES:
+1. WAYPOINT_DIRECT: Navigate direct to specified waypoint (PREFERRED)
+2. HEADING_CHANGE: Turn left or right by specified degrees
+3. ALTITUDE_CHANGE: Climb or descend to specified flight level
+4. SPEED_CHANGE: Adjust speed within aircraft performance limits
+
+WAYPOINT DIRECT OPTION:
+- You may instruct ownship to go DIRECT to a named fix within {max_waypoint_diversion} NM.
+- Nearby fixes you may choose (prefer these to avoid hallucination):
+{suggest_txt}
+{memory_context}
+
+OUTPUT FORMAT (JSON only, no additional text):
+{{
+    "resolution_type": "waypoint|heading|altitude|speed",
+    "waypoint_name": "string",     // REQUIRED if resolution_type == "waypoint"
+    "new_heading_deg": float,      // For heading: new absolute heading (0-359)
+    "delta_ft": float,             // For altitude: relative change amount
+    "new_altitude_ft": float,      // For altitude: new absolute altitude
+    "rate_fpm": float,             // For altitude: climb/descent rate
+    "new_speed_kt": float,         // For speed: new absolute speed
+    "hold_min": float,             // For waypoint: optional hold time
+    "reason": "Clear explanation of resolution strategy considering performance and experience"
+}}
+
+EXAMPLES:
+Waypoint resolution: {{"resolution_type": "waypoint", "waypoint_name": "FIX_A", "hold_min": 3, "reason": "Direct to FIX_A for efficient separation"}}
+Heading resolution: {{"resolution_type": "heading", "new_heading_deg": 270, "reason": "Turn left 30° to avoid traffic"}}
+Altitude resolution: {{"resolution_type": "altitude", "delta_ft": 1000, "rate_fpm": 1500, "reason": "Climb 1000 ft at max rate"}}
+
+CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
+
+        return prompt
 1. HEADING_CHANGE: Turn left or right by specified degrees
 2. ALTITUDE_CHANGE: Climb or descend to specified flight level
 3. SPEED_CHANGE: Adjust speed within aircraft performance limits
@@ -359,7 +609,43 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
         else:
             return f"{label}: {aircraft}"
 
-    # ---------- JSON EXTRACTION ----------
+    def add_experience_to_memory(self,
+                                ownship_state: Dict[str, Any],
+                                intruder_state: Dict[str, Any],
+                                prompt: str,
+                                llm_output: Dict[str, Any],
+                                command: str,
+                                cpa_result: Dict[str, Any],
+                                outcome: str,
+                                scenario_id: Optional[str] = None) -> None:
+        """
+        Add experience to memory system if available.
+        
+        Args:
+            ownship_state: Current ownship aircraft state
+            intruder_state: Conflicting intruder state
+            prompt: LLM prompt that was used
+            llm_output: LLM's response
+            command: BlueSky command that was executed
+            cpa_result: CPA computation result
+            outcome: "pass" or "fail" based on verification
+            scenario_id: Optional unique scenario identifier
+        """
+        if self.memory_system:
+            try:
+                self.memory_system.add_experience(
+                    ownship_state, intruder_state, prompt, llm_output,
+                    command, cpa_result, outcome, scenario_id
+                )
+                logger.debug(f"Added experience to memory: {outcome}")
+            except Exception as e:
+                logger.warning(f"Failed to add experience to memory: {e}")
+    
+    def get_memory_statistics(self) -> Dict[str, Any]:
+        """Get memory system statistics."""
+        if self.memory_system:
+            return self.memory_system.get_statistics()
+        return {'memory_available': False}
     def extract_json_from_text(self, text: str) -> Dict[str, Any]:
         """Enhanced JSON extraction with fallback patterns and math expression handling"""
         # Try multiple extraction patterns

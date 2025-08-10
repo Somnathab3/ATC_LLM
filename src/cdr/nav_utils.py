@@ -175,7 +175,7 @@ def nearest_fixes(lat: float, lon: float, k: int = 3, max_dist_nm: float = 80.0)
 
 def validate_waypoint_diversion(aircraft_lat: float, aircraft_lon: float, 
                               waypoint_name: str, max_diversion_nm: float) -> Optional[Tuple[float, float, float]]:
-    """Validate waypoint exists and is within diversion limits.
+    """Validate waypoint exists and is within diversion limits for BlueSky DIRECT command.
     
     Args:
         aircraft_lat: Current aircraft latitude
@@ -184,12 +184,12 @@ def validate_waypoint_diversion(aircraft_lat: float, aircraft_lon: float,
         max_diversion_nm: Maximum allowed diversion distance
         
     Returns:
-        (lat, lon, distance_nm) tuple if valid, None if invalid
+        (lat, lon, distance_nm) tuple if valid, None if invalid or too far
     """
     # Resolve waypoint coordinates
     coords = resolve_fix(waypoint_name)
     if not coords:
-        logger.warning(f"Waypoint '{waypoint_name}' not found in navigation database")
+        logger.warning(f"Waypoint '{waypoint_name}' not found in navigation database - fallback to heading")
         return None
     
     wp_lat, wp_lon = coords
@@ -198,6 +198,81 @@ def validate_waypoint_diversion(aircraft_lat: float, aircraft_lon: float,
     aircraft_pos = (aircraft_lat, aircraft_lon)
     waypoint_pos = (wp_lat, wp_lon)
     distance = haversine_nm(aircraft_pos, waypoint_pos)
+    
+    if distance > max_diversion_nm:
+        logger.warning(f"Waypoint '{waypoint_name}' is {distance:.1f} NM away, exceeds max diversion of {max_diversion_nm} NM - fallback to heading")
+        return None
+    
+    logger.info(f"Validated waypoint '{waypoint_name}' at {wp_lat:.6f}, {wp_lon:.6f} ({distance:.1f} NM)")
+    return wp_lat, wp_lon, distance
+
+
+def generate_bluesky_direct_command(aircraft_id: str, waypoint_name: str, 
+                                  aircraft_lat: float, aircraft_lon: float,
+                                  max_diversion_nm: float = 80.0) -> Optional[str]:
+    """Generate BlueSky DIRECT command with validation.
+    
+    Args:
+        aircraft_id: Aircraft callsign
+        waypoint_name: Target waypoint name
+        aircraft_lat: Current aircraft latitude
+        aircraft_lon: Current aircraft longitude
+        max_diversion_nm: Maximum allowed diversion distance
+        
+    Returns:
+        BlueSky DIRECT command string if valid, None if invalid
+    """
+    # Validate waypoint
+    validation_result = validate_waypoint_diversion(
+        aircraft_lat, aircraft_lon, waypoint_name, max_diversion_nm
+    )
+    
+    if not validation_result:
+        return None
+    
+    wp_lat, wp_lon, distance = validation_result
+    
+    # Generate BlueSky DIRECT command (DIRTO is synonym)
+    # BlueSky accepts: DIRECT aircraft_id waypoint_name
+    command = f"DIRECT {aircraft_id} {waypoint_name}"
+    
+    logger.info(f"Generated BlueSky command: {command} (distance: {distance:.1f} NM)")
+    return command
+
+
+def suggest_heading_fallback(aircraft_lat: float, aircraft_lon: float, 
+                           aircraft_hdg: float, target_bearing: float,
+                           max_turn_deg: float = 30.0) -> Tuple[float, str]:
+    """Suggest heading change as fallback when waypoint navigation fails.
+    
+    Args:
+        aircraft_lat: Current aircraft latitude
+        aircraft_lon: Current aircraft longitude  
+        aircraft_hdg: Current aircraft heading
+        target_bearing: Desired bearing to fly
+        max_turn_deg: Maximum allowed turn angle
+        
+    Returns:
+        (new_heading, bluesky_command) tuple
+    """
+    # Calculate turn required
+    heading_change = target_bearing - aircraft_hdg
+    
+    # Normalize to [-180, 180]
+    while heading_change > 180:
+        heading_change -= 360
+    while heading_change < -180:
+        heading_change += 360
+    
+    # Limit to maximum turn
+    limited_change = max(-max_turn_deg, min(max_turn_deg, heading_change))
+    new_heading = (aircraft_hdg + limited_change) % 360
+    
+    # Generate BlueSky heading command
+    command = f"HDG {new_heading:.0f}"
+    
+    logger.info(f"Generated heading fallback: {command} (change: {limited_change:.0f}°)")
+    return new_heading, command
     
     if distance > max_diversion_nm:
         logger.warning(f"Waypoint '{waypoint_name}' at {distance:.1f} NM exceeds diversion limit {max_diversion_nm:.1f} NM")

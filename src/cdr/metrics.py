@@ -673,3 +673,198 @@ def summarize_run(run_stats: Dict[str, Any]) -> Dict[str, Any]:
         if k not in out:
             out[k] = v
     return out
+
+
+# ============================================================================
+# FAILURE-FOCUSED ANALYSIS EXTENSIONS
+# ============================================================================
+
+@dataclass
+class LLMFailureCase:
+    """Record of LLM failure in conflict resolution."""
+    
+    timestamp: str
+    scenario_id: str
+    
+    # Situation context
+    ownship_state: Dict[str, Any]
+    intruder_states: List[Dict[str, Any]]
+    
+    # LLM decision process
+    detection_prompt: str
+    detection_output: Dict[str, Any]
+    resolution_prompt: str
+    resolution_output: Dict[str, Any]
+    
+    # Actual command executed
+    command_issued: str
+    
+    # Verification results
+    cpa_before: Dict[str, Any]  # CPA before resolution
+    cpa_after: Dict[str, Any]   # CPA after resolution  
+    bluesky_cd_flags: Dict[str, Any]  # BlueSky CD still flagging conflicts
+    
+    # Failure classification
+    failure_type: str  # "missed_conflict", "insufficient_resolution", "invalid_command"
+    severity: float    # 0.0-1.0 based on remaining separation
+    
+    # Counterfactual analysis
+    suggested_alternative: Optional[Dict[str, Any]] = None
+    alternative_cpa: Optional[Dict[str, Any]] = None
+
+
+class FailureAnalysisCollector:
+    """Collects and analyzes LLM failure cases for focused reporting."""
+    
+    def __init__(self, output_file: Optional[str] = None):
+        """
+        Initialize failure collector.
+        
+        Args:
+            output_file: JSONL file to write failure cases
+        """
+        self.failures: List[LLMFailureCase] = []
+        self.output_file = output_file
+        
+        logger.info(f"Initialized failure analysis collector, output: {output_file}")
+    
+    def record_failure(self,
+                      ownship_state: Dict[str, Any],
+                      intruder_states: List[Dict[str, Any]],
+                      detection_prompt: str,
+                      detection_output: Dict[str, Any],
+                      resolution_prompt: str,
+                      resolution_output: Dict[str, Any],
+                      command_issued: str,
+                      cpa_before: Dict[str, Any],
+                      cpa_after: Dict[str, Any],
+                      bluesky_cd_flags: Dict[str, Any],
+                      failure_type: str,
+                      scenario_id: Optional[str] = None) -> None:
+        """Record a new LLM failure case."""
+        
+        # Calculate severity based on remaining separation
+        min_sep_nm = cpa_after.get('min_sep_nm', 999.0)
+        min_sep_ft = cpa_after.get('min_sep_ft', 999.0)
+        
+        # Severity: 1.0 = complete failure (collision), 0.0 = safe
+        lateral_violation = max(0, 5.0 - min_sep_nm) / 5.0
+        vertical_violation = max(0, 1000.0 - min_sep_ft) / 1000.0
+        severity = min(1.0, max(lateral_violation, vertical_violation))
+        
+        # Generate scenario ID if not provided
+        if scenario_id is None:
+            scenario_id = f"failure_{len(self.failures):04d}_{datetime.now().strftime('%H%M%S')}"
+        
+        failure = LLMFailureCase(
+            timestamp=datetime.now().isoformat(),
+            scenario_id=scenario_id,
+            ownship_state=ownship_state,
+            intruder_states=intruder_states,
+            detection_prompt=detection_prompt,
+            detection_output=detection_output,
+            resolution_prompt=resolution_prompt,
+            resolution_output=resolution_output,
+            command_issued=command_issued,
+            cpa_before=cpa_before,
+            cpa_after=cpa_after,
+            bluesky_cd_flags=bluesky_cd_flags,
+            failure_type=failure_type,
+            severity=severity
+        )
+        
+        self.failures.append(failure)
+        
+        # Write to file if specified
+        if self.output_file:
+            self._append_to_file(failure)
+        
+        logger.warning(f"Recorded LLM failure: {failure_type} (severity={severity:.2f}) - {scenario_id}")
+    
+    def _append_to_file(self, failure: LLMFailureCase):
+        """Append failure case to JSONL file."""
+        try:
+            with open(self.output_file, 'a') as f:
+                json.dump(asdict(failure), f)
+                f.write('\n')
+        except Exception as e:
+            logger.error(f"Failed to write failure case to file: {e}")
+    
+    def analyze_failure_patterns(self) -> Dict[str, Any]:
+        """Analyze patterns in LLM failures."""
+        if not self.failures:
+            return {'total_failures': 0}
+        
+        # Failure type distribution
+        failure_types = {}
+        severity_distribution = []
+        
+        for failure in self.failures:
+            failure_types[failure.failure_type] = failure_types.get(failure.failure_type, 0) + 1
+            severity_distribution.append(failure.severity)
+        
+        # Common failure characteristics
+        high_severity_failures = [f for f in self.failures if f.severity > 0.7]
+        
+        return {
+            'total_failures': len(self.failures),
+            'failure_types': failure_types,
+            'avg_severity': np.mean(severity_distribution),
+            'high_severity_count': len(high_severity_failures),
+            'severity_distribution': {
+                'min': np.min(severity_distribution),
+                'max': np.max(severity_distribution),
+                'std': np.std(severity_distribution)
+            }
+        }
+    
+    def get_worst_failures(self, top_k: int = 5) -> List[LLMFailureCase]:
+        """Get the worst failure cases by severity."""
+        sorted_failures = sorted(self.failures, key=lambda f: f.severity, reverse=True)
+        return sorted_failures[:top_k]
+    
+    def export_summary(self, output_file: str):
+        """Export failure analysis summary to JSON."""
+        summary = {
+            'analysis_timestamp': datetime.now().isoformat(),
+            'total_failures': len(self.failures),
+            'patterns': self.analyze_failure_patterns(),
+            'worst_cases': [
+                {
+                    'scenario_id': f.scenario_id,
+                    'failure_type': f.failure_type,
+                    'severity': f.severity,
+                    'timestamp': f.timestamp,
+                    'command_issued': f.command_issued,
+                    'min_sep_after': f.cpa_after.get('min_sep_nm', 999.0)
+                }
+                for f in self.get_worst_failures()
+            ]
+        }
+        
+        with open(output_file, 'w') as f:
+            json.dump(summary, f, indent=2)
+        
+        logger.info(f"Exported failure analysis summary to {output_file}")
+
+
+def enhanced_metrics_with_failures(baseline_metrics: Dict[str, Any],
+                                  llm_metrics: Dict[str, Any],
+                                  failure_analysis: FailureAnalysisCollector) -> Dict[str, Any]:
+    """Combine baseline/LLM metrics with failure analysis."""
+    
+    failure_patterns = failure_analysis.analyze_failure_patterns()
+    
+    enhanced = {
+        'baseline_metrics': baseline_metrics,
+        'llm_metrics': llm_metrics,
+        'failure_analysis': failure_patterns,
+        'comparison': {
+            'detection_improvement': llm_metrics.get('detection_accuracy', 0.0) - baseline_metrics.get('detection_accuracy', 0.0),
+            'resolution_improvement': llm_metrics.get('resolution_success_rate', 0.0) - baseline_metrics.get('resolution_success_rate', 0.0),
+            'safety_degradation': failure_patterns.get('avg_severity', 0.0),
+            'llm_failure_rate': failure_patterns.get('total_failures', 0) / max(1, llm_metrics.get('total_cycles', 1))
+        }
+    }
+    
+    return enhanced
