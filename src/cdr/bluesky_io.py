@@ -2,25 +2,36 @@
 
 This module provides a clean interface to BlueSky that:
 - Embeds BlueSky simulator directly for better performance
+- Uses BlueSky command stack exclusively (no direct traf.cre calls)
 - Fetches real-time aircraft states (position, velocity, flight plan)
-- Executes ATC commands (HDG, ALT, SPD, DCT)
+- Executes ATC commands (HDG, ALT, SPD, DCT, VS)
+- Configures conflict detection (ASAS, CDMETHOD, DTLOOK, DTMULT)
 - Handles connection errors and retries gracefully
+
+IMPORTANT CHANGES:
+- Replaced direct traf.cre() calls with BlueSky CRE commands
+- Added proper BlueSky conflict detection configuration (DTLOOK, CDMETHOD)
+- All aircraft creation and command execution uses BlueSky command stack
+- Configurable simulation parameters via BSConfig dataclass
+- Enhanced baseline setup with proper CD configuration
 """
 
 from __future__ import annotations
-import logging, time, math, os, atexit
+import logging
+import math
+import os
+import atexit
 from dataclasses import dataclass
 from typing import Any, Optional, List, Tuple
 from pathlib import Path
-import os, logging
 
 # Import guard for BlueSky - use lazy import to prevent test failures
 try:
     from bluesky import sim
-    BLUESKY_AVAILABLE = True
+    bluesky_available = True
 except ImportError:
     sim = None
-    BLUESKY_AVAILABLE = False
+    bluesky_available = False
     logging.warning("BlueSky not available - using mock mode")
 
 log = logging.getLogger(__name__)
@@ -28,13 +39,19 @@ log = logging.getLogger(__name__)
 @dataclass
 class BSConfig:
     headless: bool = True
+    # Conflict detection and simulation parameters
+    dtlook_sec: float = 300.0  # Look-ahead time for conflict detection (seconds)
+    dtmult: float = 1.0        # Time multiplier for simulation speed
+    cdmethod: str = "BS"       # Conflict detection method: "BS", "GEOMETRIC", etc.
+    asas_enabled: bool = False # Automated Separation Assurance System
+    realtime: bool = False     # Real-time pacing mode
     # Add any IPC/embedding knobs your BlueSky runner needs
 def _user_cache_dir() -> Path:
     # BlueSky already reads/writes here (see your logs).
     return Path.home() / "bluesky" / "cache"
 
 class BlueSkyClient:
-    def __init__(self, cfg):
+    def __init__(self, cfg: BSConfig):
         self.cfg = cfg
         self.bs = None  # handle to embedded bluesky or API wrapper
         # Add host attribute expected by tests
@@ -57,7 +74,7 @@ class BlueSkyClient:
     def connect(self) -> bool:
         """Start/attach BlueSky (embedded) and return True on success."""
         # Check if BlueSky is disabled via environment
-        if os.environ.get("BLUESKY_HEADLESS") == "1" or not BLUESKY_AVAILABLE:
+        if os.environ.get("BLUESKY_HEADLESS") == "1" or not bluesky_available:
             log.info("BlueSky disabled for testing - using mock mode")
             self.bs = None
             self.traf = None 
@@ -67,7 +84,7 @@ class BlueSkyClient:
         self._ensure_cache_dir()
         try:
             # Embedded import/run with guard
-            if BLUESKY_AVAILABLE:
+            if bluesky_available:
                 import bluesky as bs
                 # Initialize BlueSky
                 bs.init()
@@ -121,85 +138,94 @@ class BlueSkyClient:
         return not self.is_connected()
 
     def create_aircraft(self, cs: str, actype: str, lat: float, lon: float, hdg_deg: float, alt_ft: float, spd_kt: float) -> bool:
-        """Create an aircraft in BlueSky. Returns True if successful."""
+        """Create an aircraft in BlueSky using command stack interface.
+        
+        This method uses BlueSky's CRE command which ensures proper integration
+        with BlueSky's conflict detection and physics systems.
+        
+        Args:
+            cs: Aircraft callsign
+            actype: Aircraft type (e.g., "B738", "A320")
+            lat: Latitude in degrees
+            lon: Longitude in degrees  
+            hdg_deg: Heading in degrees
+            alt_ft: Altitude in feet
+            spd_kt: Speed in knots
+            
+        Returns:
+            True if aircraft created successfully
+        """
         if not self.is_connected():
             error_msg = f"CRITICAL ERROR: BlueSky not connected. Cannot create aircraft {cs}"
             log.error(error_msg)
             raise RuntimeError(error_msg)
         
-        # Use stack-based creation for better consistency
-        return self._create_aircraft_via_stack(cs, actype, lat, lon, hdg_deg, alt_ft, spd_kt)
-    
-    def _create_aircraft_via_stack(self, cs: str, actype: str, lat: float, lon: float, hdg_deg: float, alt_ft: float, spd_kt: float) -> bool:
-        """Create aircraft using BlueSky command stack (safer approach)."""
-        # BlueSky CRE expects ft and kt; let it convert internally
+        # BlueSky CRE command format: CRE callsign,type,lat,lon,hdg,alt,spd
+        # BlueSky expects altitude in feet and speed in knots for CRE command
         cmd = f"CRE {cs},{actype},{lat:.6f},{lon:.6f},{hdg_deg:.1f},{alt_ft:.0f},{spd_kt:.0f}"
-        log.info(f"DEBUG: Creating aircraft via stack: {cmd}")
+        log.info(f"Creating aircraft via BlueSky CRE command: {cmd}")
+        
         result = self.stack(cmd)
-        log.info(f"DEBUG: Stack command returned: {result}")
+        if result:
+            log.info(f"Successfully created aircraft {cs} at ({lat:.6f}, {lon:.6f})")
+        else:
+            log.error(f"Failed to create aircraft {cs}")
+        
         return result
-    
-    def _create_aircraft_via_traf(self, cs: str, actype: str, lat: float, lon: float, hdg_deg: float, alt_ft: float, spd_kt: float) -> bool:
-        """Create aircraft using direct traf.cre (legacy approach)."""            
-        # Convert altitude from feet to meters (BlueSky uses meters)
-        alt_m = alt_ft * 0.3048
-        # Convert speed from knots to m/s (BlueSky uses m/s)
-        spd_ms = spd_kt * 0.514444
-        
-        log.info(f"DEBUG: Creating aircraft {cs} type={actype} pos=({lat:.6f},{lon:.6f}) hdg={hdg_deg:.1f} alt={alt_ft:.0f}ft spd={spd_kt:.0f}kt")
-        
-        try:
-            result = self.traf.cre(cs, actype, lat, lon, hdg_deg, alt_m, spd_ms)
-            log.info(f"DEBUG: BlueSky traf.cre({cs}, {actype}, {lat:.6f}, {lon:.6f}, {hdg_deg:.1f}, {alt_m:.1f}, {spd_ms:.1f}) returned: {result}")
-            
-            # Also check if aircraft exists immediately after creation
-            if hasattr(self.traf, 'id') and cs in self.traf.id:
-                log.info(f"DEBUG: Aircraft {cs} found in traf.id after creation")
-            else:
-                log.warning(f"DEBUG: Aircraft {cs} NOT found in traf.id after creation")
-            
-            if result:
-                log.info(f"Successfully created aircraft {cs} at ({lat:.6f}, {lon:.6f})")
-                return True
-            else:
-                error_msg = f"CRITICAL ERROR: BlueSky failed to create aircraft {cs} (returned {result})"
-                log.error(error_msg)
-                raise RuntimeError(error_msg)
-        except Exception as e:
-            error_msg = f"CRITICAL ERROR: Exception creating aircraft {cs}: {e}"
-            log.exception(error_msg)
-            raise RuntimeError(error_msg) from e
 
     def set_heading(self, cs: str, hdg_deg: float) -> bool:
+        """Set aircraft heading using HDG command."""
         return self.stack(f"{cs} HDG {int(round(hdg_deg))}")
 
     def set_altitude(self, cs: str, alt_ft: float) -> bool:
+        """Set aircraft altitude using ALT command."""
         return self.stack(f"{cs} ALT {int(round(alt_ft))}")
 
+    def set_speed(self, cs: str, spd_kt: float) -> bool:
+        """Set aircraft speed using SPD command."""
+        return self.stack(f"{cs} SPD {int(round(spd_kt))}")
+
+    def set_vertical_speed(self, cs: str, vs_fpm: float) -> bool:
+        """Set aircraft vertical speed using VS command.
+        
+        Args:
+            cs: Aircraft callsign
+            vs_fpm: Vertical speed in feet per minute
+            
+        Returns:
+            True if command successful
+        """
+        return self.stack(f"{cs} VS {int(round(vs_fpm))}")
+
     def direct_to(self, cs: str, wpt: str) -> bool:
+        """Direct aircraft to waypoint using DCT command."""
         return self.stack(f"{cs} DCT {wpt}")
 
     def add_waypoint(self, cs: str, lat: float, lon: float, alt_ft: Optional[float] = None) -> bool:
-        """Add a waypoint to aircraft's flight plan."""
+        """Add a waypoint to aircraft's flight plan using ADDWPT command.
+        
+        Args:
+            cs: Aircraft callsign
+            lat: Waypoint latitude in degrees
+            lon: Waypoint longitude in degrees
+            alt_ft: Optional altitude constraint in feet
+            
+        Returns:
+            True if waypoint added successfully
+        """
         if alt_ft is not None:
-            alt_m = alt_ft * 0.3048  # Convert feet to meters
-            cmd = f"ADDWPT {cs} {lat:.6f} {lon:.6f} {alt_m:.1f}"
+            # BlueSky ADDWPT expects altitude in feet for newer versions
+            cmd = f"ADDWPT {cs} {lat:.6f} {lon:.6f} {alt_ft:.0f}"
         else:
             cmd = f"ADDWPT {cs} {lat:.6f} {lon:.6f}"
         
-        log.info(f"DEBUG: Sending waypoint command: {cmd}")
+        log.info(f"Adding waypoint via BlueSky command: {cmd}")
         result = self.stack(cmd)
-        log.info(f"DEBUG: Waypoint command result: {result}")
         
-        # Check if aircraft still exists after the command (guard if traf missing)
-        try:
-            if hasattr(self, 'traf') and hasattr(self.traf, 'id') and cs in getattr(self.traf, 'id', []):
-                log.info(f"DEBUG: Aircraft {cs} still exists after waypoint command")
-            else:
-                log.warning(f"DEBUG: Aircraft {cs} NO LONGER EXISTS after waypoint command!")
-        except Exception:
-            # In mocked contexts, traf may be absent; ignore
-            pass
+        if result:
+            log.info(f"Successfully added waypoint to {cs}")
+        else:
+            log.warning(f"Failed to add waypoint to {cs}")
         
         return result
 
@@ -233,6 +259,65 @@ class BlueSkyClient:
             log.info(f"Added {len(route)} waypoints to {cs} flight plan")
         
         return success
+
+    def setup_baseline(self) -> bool:
+        """Configure BlueSky for baseline replay mode.
+        
+        This method ensures BlueSky is configured for clean baseline replay:
+        - Configures ASAS (conflict detection/resolution) based on config
+        - Sets conflict detection method from config (BS, GEOMETRIC, etc.)
+        - Sets look-ahead time (DTLOOK) for conflict detection
+        - Configures time stepping for deterministic replay
+        - Sets time multiplier from config
+        
+        Returns:
+            True if setup successful
+        """
+        if not self.is_connected():
+            error_msg = "CRITICAL ERROR: BlueSky not connected. Cannot setup baseline"
+            log.error(error_msg)
+            raise RuntimeError(error_msg)
+        
+        try:
+            # Configure ASAS based on config
+            asas_state = "ON" if self.cfg.asas_enabled else "OFF"
+            if not self.stack(f"ASAS {asas_state}"):
+                log.warning(f"Failed to set ASAS to {asas_state}")
+            else:
+                log.info(f"ASAS set to {asas_state} for baseline replay")
+            
+            # Set conflict detection method from config
+            if not self.stack(f"CDMETHOD {self.cfg.cdmethod}"):
+                log.warning(f"Failed to set CDMETHOD to {self.cfg.cdmethod}")
+            else:
+                log.info(f"Conflict detection method set to {self.cfg.cdmethod}")
+            
+            # Set look-ahead time for conflict detection
+            if not self.stack(f"DTLOOK {self.cfg.dtlook_sec}"):
+                log.warning(f"Failed to set DTLOOK to {self.cfg.dtlook_sec}")
+            else:
+                log.info(f"Conflict detection look-ahead set to {self.cfg.dtlook_sec} seconds")
+            
+            # Configure real-time mode based on config
+            realtime_state = "ON" if self.cfg.realtime else "OFF"
+            if not self.stack(f"REALTIME {realtime_state}"):
+                log.warning(f"Failed to set REALTIME to {realtime_state}")
+            else:
+                log.info(f"Real-time mode set to {realtime_state}")
+            
+            # Set time multiplier from config
+            if not self.stack(f"DTMULT {self.cfg.dtmult}"):
+                log.warning(f"Failed to set time multiplier to {self.cfg.dtmult}")
+            else:
+                log.info(f"Time multiplier set to {self.cfg.dtmult}")
+            
+            log.info("BlueSky baseline replay setup completed")
+            return True
+            
+        except Exception as e:
+            error_msg = f"CRITICAL ERROR: BlueSky baseline setup failed: {e}"
+            log.exception(error_msg)
+            raise RuntimeError(error_msg) from e
 
     def step_minutes(self, minutes: float) -> bool:
         """
@@ -343,10 +428,65 @@ class BlueSkyClient:
             error_msg = "CRITICAL ERROR: BlueSky state fetch failed"
             log.exception(error_msg)
             raise RuntimeError(error_msg) from e
+
+    # --- Dynamic Configuration Methods ---
+    def set_dtlook(self, seconds: float) -> bool:
+        """Set conflict detection look-ahead time dynamically.
         
-    def set_speed(self, cs: str, spd_kt: float) -> bool:
-         return self.stack(f"{cs} SPD {int(round(spd_kt))}")
-    
+        Args:
+            seconds: Look-ahead time in seconds
+            
+        Returns:
+            True if command successful
+        """
+        result = self.stack(f"DTLOOK {seconds}")
+        if result:
+            log.info(f"Conflict detection look-ahead set to {seconds} seconds")
+        return result
+
+    def set_dtmult(self, multiplier: float) -> bool:
+        """Set time multiplier dynamically.
+        
+        Args:
+            multiplier: Time step multiplier (e.g., 2.0 for 2x speed)
+            
+        Returns:
+            True if command successful
+        """
+        result = self.stack(f"DTMULT {multiplier}")
+        if result:
+            log.info(f"Time multiplier set to {multiplier}")
+        return result
+
+    def set_cdmethod(self, method: str) -> bool:
+        """Set conflict detection method dynamically.
+        
+        Args:
+            method: Conflict detection method ("BS", "GEOMETRIC", etc.)
+            
+        Returns:
+            True if command successful
+        """
+        result = self.stack(f"CDMETHOD {method}")
+        if result:
+            log.info(f"Conflict detection method set to {method}")
+        return result
+
+    def set_asas(self, enabled: bool) -> bool:
+        """Enable or disable ASAS dynamically.
+        
+        Args:
+            enabled: True to enable ASAS, False to disable
+            
+        Returns:
+            True if command successful
+        """
+        state = "ON" if enabled else "OFF"
+        result = self.stack(f"ASAS {state}")
+        if result:
+            log.info(f"ASAS set to {state}")
+        return result
+        
     def direct_to_waypoint(self, cs: str, wpt: str) -> bool:
         """Convenience alias for direct_to method."""
         return self.direct_to(cs, wpt)

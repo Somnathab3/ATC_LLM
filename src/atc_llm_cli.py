@@ -12,50 +12,77 @@ def console_main():
     """Console script entry point."""
     # Try multiple ways to find and import the CLI module
     
-    # Method 1: Try direct import (if installed properly)
+    # Method 1: Try direct import from project root (if installed properly)
     try:
-        from cli import main
-        return main()
-    except ImportError:
-        pass
+        # Add project root to path if we can find it
+        current_file = Path(__file__).resolve()
+        project_root = current_file.parent.parent  # src -> ATC_LLM
+        
+        # Check if cli.py exists in the project root
+        cli_file = project_root / "cli.py"
+        if cli_file.exists():
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+            from cli import main
+            return main()
+            
+    except (ImportError, Exception) as e:
+        print(f"Method 1 failed: {e}")
     
-    # Method 2: Try adding project root to path
+    # Method 2: Try finding cli.py in current working directory
     try:
-        # Find the project root by looking for cli.py
-        current_dir = Path(__file__).parent.parent  # Start from src parent
-        
-        # Look for cli.py in current directory and parent directories
-        for potential_root in [current_dir, current_dir.parent]:
-            cli_file = potential_root / "cli.py"
-            if cli_file.exists():
-                sys.path.insert(0, str(potential_root))
+        cwd = Path.cwd()
+        cli_file = cwd / "cli.py"
+        if cli_file.exists():
+            if str(cwd) not in sys.path:
+                sys.path.insert(0, str(cwd))
+            from cli import main
+            return main()
+    except (ImportError, Exception) as e:
+        print(f"Method 2 failed: {e}")
+    
+    # Method 3: Try finding ATC_LLM directory in parent directories
+    try:
+        current_dir = Path.cwd()
+        # Go up the directory tree looking for ATC_LLM/cli.py
+        for i in range(5):  # Check up to 5 levels up
+            potential_cli = current_dir / "cli.py"
+            if potential_cli.exists():
+                if str(current_dir) not in sys.path:
+                    sys.path.insert(0, str(current_dir))
                 from cli import main
                 return main()
-        
-        # Method 3: Try relative to the installed script location
-        script_dir = Path(sys.argv[0]).parent.parent  # Go up from Scripts dir
-        for potential_root in [script_dir, script_dir.parent]:
-            cli_file = potential_root / "ATC_LLM" / "cli.py"
-            if cli_file.exists():
-                sys.path.insert(0, str(potential_root / "ATC_LLM"))
-                from cli import main
-                return main()
+            
+            # Also check for ATC_LLM subdirectory
+            atc_llm_dir = current_dir / "ATC_LLM"
+            if atc_llm_dir.exists():
+                potential_cli = atc_llm_dir / "cli.py"
+                if potential_cli.exists():
+                    if str(atc_llm_dir) not in sys.path:
+                        sys.path.insert(0, str(atc_llm_dir))
+                    from cli import main
+                    return main()
+            
+            current_dir = current_dir.parent
+            if current_dir == current_dir.parent:  # Reached root
+                break
                 
-    except (ImportError, Exception):
-        pass
+    except (ImportError, Exception) as e:
+        print(f"Method 3 failed: {e}")
     
-    # Method 4: Try finding ATC_LLM directory in common locations
+    # Method 4: Try environment-based detection
     try:
-        # Check if we're in a virtual environment
+        # Check if we're in a virtual environment and find ATC_LLM
         if hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
-            venv_root = Path(sys.prefix).parent  # Go up from .venv
-            atc_llm_dir = venv_root / "ATC_LLM"
+            venv_root = Path(sys.prefix).parent
+            atc_llm_dir = venv_root / "ATC_LLM_01" / "ATC_LLM"
             if atc_llm_dir.exists() and (atc_llm_dir / "cli.py").exists():
-                sys.path.insert(0, str(atc_llm_dir))
+                if str(atc_llm_dir) not in sys.path:
+                    sys.path.insert(0, str(atc_llm_dir))
                 from cli import main
                 return main()
-    except (ImportError, Exception):
-        pass
+    except (ImportError, Exception) as e:
+        print(f"Method 4 failed: {e}")
     
     # If all methods fail, provide helpful error message
     print("Error: Could not locate the ATC-LLM CLI module.")
@@ -65,12 +92,17 @@ def console_main():
     print("3. The installation is incomplete or corrupted")
     print()
     print("Try running these commands:")
-    print("  cd /path/to/ATC_LLM")
+    print("  cd F:\\ATC_LLM_01\\ATC_LLM")
     print("  pip install -e .")
     print("  atc-llm health-check")
     print()
+    print("Alternative - run directly:")
+    print("  cd F:\\ATC_LLM_01\\ATC_LLM")
+    print("  python cli.py health-check --verbose --test-llm --test-bluesky --test-scat")
+    print()
     print(f"Current working directory: {os.getcwd()}")
-    print(f"Python path: {sys.path[:3]}...")
+    print(f"Python executable: {sys.executable}")
+    print(f"Script location: {__file__}")
     return 1
 
 if __name__ == "__main__":

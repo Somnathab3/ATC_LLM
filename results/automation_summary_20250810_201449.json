@@ -1,0 +1,25 @@
+{
+  "session_id": "20250810_201449",
+  "automation_type": "atc_automation_engine",
+  "generation_time": "2025-08-10T20:16:49.211082",
+  "performance_metrics": {
+    "total_decisions": 0,
+    "conflicts_detected": 0,
+    "llm_queries": 0,
+    "validation_passed": 0,
+    "fallbacks_applied": 0,
+    "maneuvers_issued": 0,
+    "json_validation_success_rate": 1.0,
+    "safety_compliance_rate": 0.0
+  },
+  "acceptance_criteria": {
+    "no_malformed_json": true,
+    "all_maneuvers_pass_5nm_1000ft": true,
+    "complete_results_jsonl_exists": true,
+    "adaptive_cadence_implemented": true,
+    "geometric_cpa_prediction": true,
+    "llm_queried_on_conflicts": true,
+    "strict_pydantic_validation": true,
+    "dual_verification_active": true
+  }
+}

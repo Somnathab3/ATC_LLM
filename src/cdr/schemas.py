@@ -110,6 +110,12 @@ class ResolutionCommand(BaseModel):
     waypoint_lon: Optional[float] = Field(None, description="Resolved waypoint longitude")
     diversion_distance_nm: Optional[float] = Field(None, description="Distance to target waypoint")
     
+    # Hold pattern parameters - GAP 5 FIX
+    hold_min: Optional[float] = Field(None, ge=1, le=60, description="Holding pattern duration in minutes")
+    
+    # Rate parameters - GAP 5 FIX  
+    rate_fpm: Optional[float] = Field(None, description="Climb/descent rate in feet per minute")
+    
     # Timing
     issue_time: datetime = Field(..., description="When to issue command")
     expected_completion_time: Optional[datetime] = None
