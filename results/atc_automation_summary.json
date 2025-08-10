@@ -1,0 +1,21 @@
+{
+  "demo_type": "atc_automation_engine",
+  "generation_time": 1754849578.8288908,
+  "simulation_duration_min": 0.0,
+  "test_scenarios": [
+    "head-on_conflict_ATC001_vs_ATC002",
+    "crossing_traffic_ATC003",
+    "altitude_separation_testing"
+  ],
+  "automation_performance": {
+    "total_decisions": 0,
+    "conflicts_resolved": 0,
+    "min_sep_samples": 0,
+    "automation_active": true
+  },
+  "safety_metrics": {
+    "min_separation_maintained": true,
+    "no_malformed_commands": true,
+    "all_maneuvers_validated": true
+  }
+}

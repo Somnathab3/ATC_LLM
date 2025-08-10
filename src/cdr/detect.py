@@ -2,14 +2,19 @@
 
 This module implements the core conflict detection logic that:
 - Takes current aircraft states from BlueSky
-- Projects trajectories forward 10 minutes
+- Projects trajectories forward 10 minutes  
 - Identifies potential conflicts based on separation standards
 - Returns structured conflict predictions for LLM processing
+- Uses enhanced CPA calculations with adaptive cadence
 """
 
 import math
 from typing import List, Tuple
 from .schemas import ConflictPrediction, AircraftState
+from .enhanced_cpa import (
+    calculate_enhanced_cpa, check_minimum_separation, 
+    calculate_adaptive_cadence, CPAResult, MinSepCheck
+)
 
 
 # Aviation separation standards
@@ -120,6 +125,198 @@ def predict_conflicts(
     # Sort by time to conflict (most urgent first)
     conflicts.sort(key=lambda c: c.time_to_cpa_min)
     return conflicts
+
+
+def predict_conflicts_enhanced(
+    ownship: AircraftState,
+    traffic: List[AircraftState],
+    lookahead_minutes: float = 10.0,
+    use_adaptive_cadence: bool = True
+) -> Tuple[List[ConflictPrediction], float]:
+    """Enhanced conflict detection with CPA verification and adaptive cadence.
+    
+    This function addresses the fixed cadence issue by:
+    - Using enhanced CPA calculations with confidence scoring
+    - Performing minimum separation verification
+    - Calculating adaptive polling intervals based on proximity/urgency
+    - Cross-validating results for accuracy
+    
+    Args:
+        ownship: Current ownship state
+        traffic: List of traffic aircraft states
+        lookahead_minutes: Prediction time horizon
+        use_adaptive_cadence: Whether to calculate adaptive polling interval
+        
+    Returns:
+        Tuple of (conflicts, recommended_polling_interval_minutes)
+    """
+    from .geodesy import haversine_nm
+    
+    conflicts = []
+    
+    # Calculate adaptive cadence first (affects detection sensitivity)
+    if use_adaptive_cadence:
+        initial_conflicts = predict_conflicts(ownship, traffic, lookahead_minutes)
+        recommended_interval = calculate_adaptive_cadence(ownship, traffic, initial_conflicts)
+    else:
+        recommended_interval = 2.0  # Default 2-minute interval
+    
+    for intruder in traffic:
+        # Skip self
+        if intruder.aircraft_id == ownship.aircraft_id:
+            continue
+            
+        # Pre-filter: check if within reasonable range
+        own_pos = (ownship.latitude, ownship.longitude)
+        intr_pos = (intruder.latitude, intruder.longitude)
+        horizontal_distance = haversine_nm(own_pos, intr_pos)
+        
+        # Dynamic pre-filtering based on adaptive cadence
+        max_range_nm = 100.0 if recommended_interval > 2.0 else 150.0  # Expand range for urgent situations
+        if horizontal_distance > max_range_nm:
+            continue
+            
+        # Pre-filter: check if within vertical range
+        altitude_diff = abs(ownship.altitude_ft - intruder.altitude_ft)
+        max_alt_diff = 5000.0 if recommended_interval > 2.0 else 8000.0  # Expand range for urgent situations
+        if altitude_diff > max_alt_diff:
+            continue
+            
+        # Enhanced CPA calculation
+        cpa_result = calculate_enhanced_cpa(ownship, intruder)
+        
+        # Skip if aircraft are diverging or CPA is too far in future
+        if cpa_result.time_to_cpa_min <= 0 or cpa_result.time_to_cpa_min > lookahead_minutes:
+            continue
+            
+        # Current minimum separation check
+        min_sep_check = check_minimum_separation(ownship, intruder)
+        
+        # Enhanced conflict determination
+        is_conflict = _is_enhanced_conflict(cpa_result, min_sep_check, lookahead_minutes)
+        
+        if is_conflict:
+            # Calculate enhanced severity based on multiple factors
+            severity = _calculate_enhanced_severity(cpa_result, min_sep_check, recommended_interval)
+            
+            # Determine conflict type
+            conflict_type = _determine_conflict_type(cpa_result, min_sep_check)
+            
+            # Calculate future altitude difference (assuming level flight)
+            future_alt_diff = abs(ownship.altitude_ft - intruder.altitude_ft)
+            
+            conflict = ConflictPrediction(
+                ownship_id=ownship.aircraft_id,
+                intruder_id=intruder.aircraft_id,
+                time_to_cpa_min=cpa_result.time_to_cpa_min,
+                distance_at_cpa_nm=cpa_result.distance_at_cpa_nm,
+                altitude_diff_ft=future_alt_diff,
+                is_conflict=True,
+                severity_score=severity,
+                conflict_type=conflict_type,
+                prediction_time=ownship.timestamp,
+                confidence=cpa_result.confidence
+            )
+            conflicts.append(conflict)
+    
+    # Sort by urgency (combination of time and severity)
+    conflicts.sort(key=lambda c: (c.time_to_cpa_min, -c.severity_score))
+    
+    return conflicts, recommended_interval
+
+
+def _is_enhanced_conflict(cpa_result: CPAResult, min_sep_check: MinSepCheck, lookahead_min: float) -> bool:
+    """Enhanced conflict determination using CPA and minimum separation data.
+    
+    Args:
+        cpa_result: Enhanced CPA calculation result
+        min_sep_check: Current separation check result
+        lookahead_min: Lookahead time window
+        
+    Returns:
+        True if conflict criteria are met
+    """
+    # Immediate conflict if currently violating separation
+    if min_sep_check.is_conflict:
+        return True
+    
+    # Future conflict prediction
+    if cpa_result.time_to_cpa_min > 0 and cpa_result.time_to_cpa_min <= lookahead_min:
+        # Horizontal violation at CPA
+        horizontal_violation = cpa_result.distance_at_cpa_nm < MIN_HORIZONTAL_SEP_NM
+        
+        # For now, assume level flight for vertical separation
+        # (Could be enhanced with vertical speed predictions)
+        vertical_violation = min_sep_check.vertical_sep_ft < MIN_VERTICAL_SEP_FT
+        
+        # Conflict if both standards will be violated
+        if horizontal_violation and vertical_violation:
+            return True
+        
+        # Special case: very close approach even if not technically violating standards
+        if cpa_result.distance_at_cpa_nm < 3.0 and cpa_result.time_to_cpa_min < 3.0:
+            return True
+    
+    return False
+
+
+def _calculate_enhanced_severity(cpa_result: CPAResult, min_sep_check: MinSepCheck, 
+                                polling_interval: float) -> float:
+    """Calculate enhanced severity score considering multiple factors.
+    
+    Args:
+        cpa_result: CPA calculation result
+        min_sep_check: Separation check result  
+        polling_interval: Current polling interval (indicates urgency)
+        
+    Returns:
+        Severity score from 0.0 to 1.0
+    """
+    severity = 0.0
+    
+    # Time urgency factor (closer = higher severity)
+    if cpa_result.time_to_cpa_min > 0:
+        time_factor = max(0.0, 1.0 - (cpa_result.time_to_cpa_min / 10.0))
+        severity += 0.4 * time_factor
+    
+    # Distance factor (closer = higher severity)
+    if cpa_result.distance_at_cpa_nm >= 0:
+        distance_factor = max(0.0, 1.0 - (cpa_result.distance_at_cpa_nm / MIN_HORIZONTAL_SEP_NM))
+        severity += 0.3 * distance_factor
+    
+    # Convergence rate factor (faster convergence = higher severity)
+    if cpa_result.convergence_rate_nm_min < 0:  # Converging
+        convergence_factor = min(1.0, abs(cpa_result.convergence_rate_nm_min) / 10.0)
+        severity += 0.2 * convergence_factor
+    
+    # Polling interval urgency (shorter interval indicates higher urgency)
+    interval_factor = max(0.0, 1.0 - (polling_interval / 5.0))
+    severity += 0.1 * interval_factor
+    
+    # Ensure severity is between 0.1 and 1.0
+    return max(0.1, min(1.0, severity))
+
+
+def _determine_conflict_type(cpa_result: CPAResult, min_sep_check: MinSepCheck) -> str:
+    """Determine the type of conflict based on separation violations.
+    
+    Args:
+        cpa_result: CPA calculation result
+        min_sep_check: Separation check result
+        
+    Returns:
+        Conflict type string
+    """
+    if min_sep_check.horizontal_violation and min_sep_check.vertical_violation:
+        return "both"
+    elif min_sep_check.horizontal_violation:
+        return "horizontal"
+    elif min_sep_check.vertical_violation:
+        return "vertical"
+    elif cpa_result.distance_at_cpa_nm < MIN_HORIZONTAL_SEP_NM:
+        return "horizontal"
+    else:
+        return "horizontal"  # Default
 
 
 def is_conflict(

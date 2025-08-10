@@ -847,7 +847,7 @@ def format_resolution_command(cmd: ResolutionCommand) -> str:
     elif cmd.resolution_type == ResolutionType.ALTITUDE_CHANGE and cmd.new_altitude_ft:
         return f"ALT {cmd.target_aircraft} {cmd.new_altitude_ft:.0f}"
     elif cmd.resolution_type == ResolutionType.WAYPOINT_DIRECT and cmd.waypoint_name:
-        return f"DIRECT {cmd.target_aircraft} {cmd.waypoint_name}"
+        return f"{cmd.target_aircraft} DIRECTTO {cmd.waypoint_name}"
     else:
         return f"# Invalid resolution command for {cmd.target_aircraft}"
 def validate_resolution(
@@ -889,7 +889,7 @@ def to_bluesky_command(
     elif resolution.new_speed_kt is not None:
         return to_bluesky_command_speed(aircraft_id, resolution.new_speed_kt)
     elif resolution.waypoint_name is not None:
-        return f"{aircraft_id} DCT {resolution.waypoint_name}"
+        return f"{aircraft_id} DIRECTTO {resolution.waypoint_name}"
     else:
         return f"# TODO: {aircraft_id}"  # Fallback
 

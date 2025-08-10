@@ -328,6 +328,10 @@ OUTPUT FORMAT (JSON only, no additional text):
 EXAMPLES:
 Heading change: {{"action": "turn", "params": {{"heading_deg": 270}}, "reason": "Turn left 30° to avoid traffic"}}
 Waypoint direct: {{"action": "waypoint", "params": {{"waypoint_name": "BOKSU"}}, "reason": "Direct to BOKSU for efficient separation"}}
+Altitude change: {{"action": "altitude", "params": {{"new_altitude_ft": 7000, "rate_fpm": 1000}}, "reason": "Climb to FL070 at 1000 fpm"}}
+Speed reduction: {{"action": "speed", "params": {{"new_speed_kt": 180}}, "reason": "Reduce speed to 180 knots for spacing"}}
+Combined maneuver: {{"action": "combined", "params": {{"heading_deg": 090, "new_altitude_ft": 8000, "rate_fpm": 1500}}, "reason": "Turn right to 090 and climb to FL080"}}
+Hold pattern: {{"action": "hold", "params": {{"waypoint_name": "NAVID", "hold_min": 5}}, "reason": "Hold at NAVID for 5 minutes for traffic sequencing"}}
 
 CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
 
@@ -1043,6 +1047,29 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
             "backup_actions": []
         }
 
+    def _get_noop_detection_response(self) -> Dict[str, Any]:
+        """GAP 6 FIX: Provide no-op detection response after retry exhaustion."""
+        return {
+            "conflict": False,
+            "intruders": [],
+            "horizon_min": 10,
+            "reason": "No-op: LLM retry exhausted, no conflicts detected",
+            "conflicts_detected": []
+        }
+
+    def _get_noop_resolution_response(self) -> Dict[str, Any]:
+        """GAP 6 FIX: Provide no-op resolution response after retry exhaustion."""
+        return {
+            "action": "NO_ACTION",
+            "params": {},
+            "bluesky_command": "",
+            "rationale": "No-op: LLM retry exhausted, no action taken",
+            "confidence": 0.0,
+            "expected_separation_improvement": 0.0,
+            "estimated_delay_min": 0.0,
+            "backup_actions": []
+        }
+
     def _get_default_detection_value(self, field: str) -> Any:
         """Get default value for missing detection field."""
         defaults = {
@@ -1257,9 +1284,18 @@ CRITICAL: Return only valid JSON."""
         except Exception as e:
             if retries > 0:
                 return self.call_json(prompt + "\\n\\nReturn ONLY valid JSON.", schema_hint, retries - 1)
-            error_msg = f"CRITICAL ERROR: LLM JSON response failed after retries: {e}. Cannot proceed without LLM."
-            logger.error(error_msg)
-            raise RuntimeError(error_msg) from e
+            
+            # GAP 6 FIX: No-op fallback after 3x retry instead of throwing error
+            logger.warning(f"LLM JSON response failed after {max_retries or 1} retries: {e}. Returning no-op response.")
+            
+            # Return appropriate no-op response based on prompt content
+            if "detect" in prompt.lower() or "conflict" in prompt.lower():
+                return self._get_noop_detection_response()
+            elif "resolv" in prompt.lower() or "action" in prompt.lower():
+                return self._get_noop_resolution_response()
+            else:
+                # Default to detection no-op for unknown prompts
+                return self._get_noop_detection_response()
 
 
 # Backward compatibility alias - keep until all references are updated

@@ -11,10 +11,22 @@ scenario replay and CDR system testing.
 import json
 import logging
 import os
+import math
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
+
+try:
+    from scipy.spatial import KDTree
+    import numpy as np
+    SCIPY_AVAILABLE = True
+except ImportError:
+    logging.warning("scipy not available. Using fallback spatial search.")
+    SCIPY_AVAILABLE = False
+    KDTree = None
+    np = None
 
 from .schemas import AircraftState
 
@@ -47,6 +59,251 @@ class SCATFlightRecord:
     rvsm_capable: bool = False
 
 
+@dataclass
+class VicinityQueryPerformance:
+    """Performance metrics for vicinity queries."""
+    
+    query_count: int = 0
+    total_query_time_ms: float = 0.0
+    min_query_time_ms: float = float('inf')
+    max_query_time_ms: float = 0.0
+    avg_query_time_ms: float = 0.0
+    
+    def add_query_time(self, query_time_ms: float):
+        """Add a new query time and update statistics."""
+        self.query_count += 1
+        self.total_query_time_ms += query_time_ms
+        self.min_query_time_ms = min(self.min_query_time_ms, query_time_ms)
+        self.max_query_time_ms = max(self.max_query_time_ms, query_time_ms)
+        self.avg_query_time_ms = self.total_query_time_ms / self.query_count
+    
+    def get_summary(self) -> Dict[str, Any]:
+        """Get performance summary statistics."""
+        return {
+            'query_count': self.query_count,
+            'total_time_ms': round(self.total_query_time_ms, 2),
+            'avg_time_ms': round(self.avg_query_time_ms, 2),
+            'min_time_ms': round(self.min_query_time_ms, 2),
+            'max_time_ms': round(self.max_query_time_ms, 2),
+            'queries_per_second': round(self.query_count / (self.total_query_time_ms / 1000.0), 2) if self.total_query_time_ms > 0 else 0
+        }
+
+
+class VicinityIndex:
+    """High-performance vicinity indexing with spatial search and performance tracking."""
+    
+    def __init__(self, use_kdtree: bool = True):
+        """Initialize vicinity index.
+        
+        Args:
+            use_kdtree: Whether to use KDTree for spatial indexing
+        """
+        self.use_kdtree = use_kdtree and SCIPY_AVAILABLE
+        self.spatial_index = None
+        self.indexed_positions = []  # AircraftState objects
+        self.position_coords = []    # ECEF coordinates for each position
+        self.performance = VicinityQueryPerformance()
+        self.index_build_time_ms = 0.0
+        
+        logger.info(f"VicinityIndex initialized with KDTree: {'enabled' if self.use_kdtree else 'disabled'}")
+    
+    def build_index(self, aircraft_states: List[AircraftState]) -> None:
+        """Build spatial index from aircraft states with performance tracking.
+        
+        Args:
+            aircraft_states: List of aircraft states to index
+        """
+        start_time = time.perf_counter()
+        
+        if not aircraft_states:
+            logger.warning("No aircraft states provided for vicinity indexing")
+            return
+        
+        self.indexed_positions = []
+        self.position_coords = []
+        
+        if self.use_kdtree:
+            try:
+                # Convert to ECEF coordinates for accurate distance calculations
+                points_3d = []
+                
+                for state in aircraft_states:
+                    # Convert altitude from feet to meters for ECEF
+                    alt_m = state.altitude_ft * 0.3048
+                    x, y, z = self._lat_lon_to_ecef(state.latitude, state.longitude, alt_m)
+                    
+                    points_3d.append([x, y, z])
+                    self.indexed_positions.append(state)
+                    self.position_coords.append((x, y, z))
+                
+                if points_3d:
+                    self.spatial_index = KDTree(np.array(points_3d))
+                    
+                    build_time = (time.perf_counter() - start_time) * 1000.0
+                    self.index_build_time_ms = build_time
+                    
+                    logger.info(f"VicinityIndex: Built KDTree with {len(points_3d)} positions in {build_time:.1f}ms")
+                else:
+                    logger.warning("No valid positions found for KDTree indexing")
+                    
+            except Exception as e:
+                logger.warning(f"Failed to build KDTree index: {e}, falling back to linear search")
+                self.use_kdtree = False
+                self.spatial_index = None
+        
+        if not self.use_kdtree:
+            # Simple list-based indexing for fallback
+            self.indexed_positions = aircraft_states[:]
+            build_time = (time.perf_counter() - start_time) * 1000.0
+            self.index_build_time_ms = build_time
+            logger.info(f"VicinityIndex: Built linear index with {len(aircraft_states)} positions in {build_time:.1f}ms")
+    
+    def query_vicinity(self, ownship_state: AircraftState, 
+                      radius_nm: float = 100.0, 
+                      altitude_window_ft: float = 5000.0) -> List[AircraftState]:
+        """Query aircraft in vicinity with performance tracking.
+        
+        Args:
+            ownship_state: Ownship aircraft state
+            radius_nm: Search radius in nautical miles
+            altitude_window_ft: Altitude window in feet
+            
+        Returns:
+            List of aircraft states within vicinity
+        """
+        query_start = time.perf_counter()
+        
+        try:
+            if self.use_kdtree and self.spatial_index:
+                vicinity_aircraft = self._query_kdtree_vicinity(
+                    ownship_state, radius_nm, altitude_window_ft
+                )
+            else:
+                vicinity_aircraft = self._query_linear_vicinity(
+                    ownship_state, radius_nm, altitude_window_ft
+                )
+            
+            # Record performance metrics
+            query_time_ms = (time.perf_counter() - query_start) * 1000.0
+            self.performance.add_query_time(query_time_ms)
+            
+            logger.debug(f"VicinityIndex query: found {len(vicinity_aircraft)} aircraft in "
+                        f"{query_time_ms:.2f}ms (method: {'KDTree' if self.use_kdtree else 'linear'})")
+            
+            return vicinity_aircraft
+            
+        except Exception as e:
+            query_time_ms = (time.perf_counter() - query_start) * 1000.0
+            self.performance.add_query_time(query_time_ms)
+            logger.error(f"VicinityIndex query failed in {query_time_ms:.2f}ms: {e}")
+            return []
+    
+    def _query_kdtree_vicinity(self, ownship_state: AircraftState, 
+                              radius_nm: float, altitude_window_ft: float) -> List[AircraftState]:
+        """Query vicinity using KDTree spatial index."""
+        # Convert ownship position to ECEF
+        alt_m = ownship_state.altitude_ft * 0.3048
+        ox, oy, oz = self._lat_lon_to_ecef(
+            ownship_state.latitude, 
+            ownship_state.longitude, 
+            alt_m
+        )
+        
+        # Convert radius from NM to meters (1 NM = 1852 m)
+        radius_m = radius_nm * 1852.0
+        
+        # Query KDTree for points within radius
+        indices = self.spatial_index.query_ball_point([ox, oy, oz], radius_m)
+        
+        vicinity_aircraft = []
+        for idx in indices:
+            if idx < len(self.indexed_positions):
+                candidate = self.indexed_positions[idx]
+                
+                # Skip self
+                if (candidate.aircraft_id == ownship_state.aircraft_id and 
+                    candidate.timestamp == ownship_state.timestamp):
+                    continue
+                
+                # Check altitude window
+                alt_diff = abs(candidate.altitude_ft - ownship_state.altitude_ft)
+                if alt_diff <= altitude_window_ft:
+                    vicinity_aircraft.append(candidate)
+        
+        return vicinity_aircraft
+    
+    def _query_linear_vicinity(self, ownship_state: AircraftState, 
+                              radius_nm: float, altitude_window_ft: float) -> List[AircraftState]:
+        """Query vicinity using linear search fallback."""
+        vicinity_aircraft = []
+        
+        for state in self.indexed_positions:
+            if (state.aircraft_id == ownship_state.aircraft_id and 
+                state.timestamp == ownship_state.timestamp):
+                continue
+            
+            # Calculate great circle distance
+            from .geodesy import haversine_nm
+            distance = haversine_nm(
+                (ownship_state.latitude, ownship_state.longitude),
+                (state.latitude, state.longitude)
+            )
+            
+            alt_diff = abs(state.altitude_ft - ownship_state.altitude_ft)
+            
+            if distance <= radius_nm and alt_diff <= altitude_window_ft:
+                vicinity_aircraft.append(state)
+        
+        return vicinity_aircraft
+    
+    def _lat_lon_to_ecef(self, lat: float, lon: float, alt_m: float = 0.0) -> Tuple[float, float, float]:
+        """Convert latitude/longitude/altitude to ECEF coordinates.
+        
+        Args:
+            lat: Latitude in degrees
+            lon: Longitude in degrees  
+            alt_m: Altitude in meters (default: 0)
+            
+        Returns:
+            (x, y, z) coordinates in ECEF (meters)
+        """
+        lat_rad = math.radians(lat)
+        lon_rad = math.radians(lon)
+        
+        # WGS84 constants
+        a = 6378137.0  # Semi-major axis
+        e2 = 6.69437999014e-3  # First eccentricity squared
+        
+        N = a / math.sqrt(1 - e2 * math.sin(lat_rad)**2)
+        x = (N + alt_m) * math.cos(lat_rad) * math.cos(lon_rad)
+        y = (N + alt_m) * math.cos(lat_rad) * math.sin(lon_rad)
+        z = (N * (1 - e2) + alt_m) * math.sin(lat_rad)
+        
+        return x, y, z
+
+    def get_performance_summary(self) -> Dict[str, Any]:
+        """Get comprehensive performance summary."""
+        summary = self.performance.get_summary()
+        summary.update({
+            'index_build_time_ms': round(self.index_build_time_ms, 2),
+            'index_type': 'KDTree' if self.use_kdtree else 'Linear',
+            'indexed_positions': len(self.indexed_positions),
+            'spatial_index_available': self.spatial_index is not None
+        })
+        return summary
+    
+    def log_performance_summary(self):
+        """Log performance summary to logger."""
+        summary = self.get_performance_summary()
+        logger.info(f"VicinityIndex Performance Summary:")
+        logger.info(f"  Index type: {summary['index_type']}")
+        logger.info(f"  Build time: {summary['index_build_time_ms']}ms")
+        logger.info(f"  Indexed positions: {summary['indexed_positions']}")
+        logger.info(f"  Queries executed: {summary['query_count']}")
+        logger.info(f"  Avg query time: {summary['avg_time_ms']}ms")
+        logger.info(f"  Query throughput: {summary['queries_per_second']} queries/sec")
+
+
 class SCATAdapter:
     """Adapter for loading and processing SCAT dataset files."""
     
@@ -64,8 +321,200 @@ class SCATAdapter:
         self.flight_files = [f for f in self.flight_files 
                            if f.name not in ['airspace', 'grib_met']]
         
+        # Initialize VicinityIndex for high-performance vicinity queries
+        self.vicinity_index = VicinityIndex(use_kdtree=SCIPY_AVAILABLE)
+        
+        # Legacy attributes for backward compatibility
+        self.use_kdtree = SCIPY_AVAILABLE
+        self.spatial_index = None  # Deprecated: use vicinity_index instead
+        self.flight_positions = []  # Deprecated: use vicinity_index instead
+        
         logger.info(f"Found {len(self.flight_files)} SCAT flight records")
+        logger.info(f"VicinityIndex initialized with KDTree: {'enabled' if SCIPY_AVAILABLE else 'disabled'}")
     
+    def lat_lon_to_ecef(self, lat: float, lon: float, alt_m: float = 0.0) -> Tuple[float, float, float]:
+        """Convert latitude/longitude/altitude to ECEF coordinates.
+        
+        Args:
+            lat: Latitude in degrees
+            lon: Longitude in degrees  
+            alt_m: Altitude in meters (default: 0)
+            
+        Returns:
+            (x, y, z) coordinates in ECEF (meters)
+        """
+        lat_rad = math.radians(lat)
+        lon_rad = math.radians(lon)
+        
+        # WGS84 constants
+        a = 6378137.0  # Semi-major axis
+        e2 = 6.69437999014e-3  # First eccentricity squared
+        
+        N = a / math.sqrt(1 - e2 * math.sin(lat_rad)**2)
+        x = (N + alt_m) * math.cos(lat_rad) * math.cos(lon_rad)
+        y = (N + alt_m) * math.cos(lat_rad) * math.sin(lon_rad)
+        z = (N * (1 - e2) + alt_m) * math.sin(lat_rad)
+        
+        return x, y, z
+    
+    def build_spatial_index(self, aircraft_states: List[AircraftState]) -> None:
+        """Build spatial index for efficient vicinity queries with performance tracking.
+        
+        Args:
+            aircraft_states: List of aircraft states to index
+        """
+        # Use the new VicinityIndex for improved performance tracking
+        self.vicinity_index.build_index(aircraft_states)
+        
+        # For backward compatibility, also update legacy attributes
+        self.flight_positions = self.vicinity_index.indexed_positions[:]
+        self.spatial_index = self.vicinity_index.spatial_index
+        
+        # Log performance summary
+        self.vicinity_index.log_performance_summary()
+    
+    def find_vicinity_aircraft(self, ownship_state: AircraftState, 
+                              radius_nm: float = 100.0, 
+                              altitude_window_ft: float = 5000.0) -> List[AircraftState]:
+        """Find aircraft in vicinity using high-performance VicinityIndex.
+        
+        Args:
+            ownship_state: Ownship aircraft state
+            radius_nm: Search radius in nautical miles
+            altitude_window_ft: Altitude window in feet
+            
+        Returns:
+            List of aircraft states within vicinity
+        """
+        return self.vicinity_index.query_vicinity(ownship_state, radius_nm, altitude_window_ft)
+    
+    def get_vicinity_performance_summary(self) -> Dict[str, Any]:
+        """Get performance summary for vicinity queries.
+        
+        Returns:
+            Dictionary with performance metrics
+        """
+        return self.vicinity_index.get_performance_summary()
+    
+    def log_vicinity_performance(self):
+        """Log vicinity query performance summary."""
+        self.vicinity_index.log_performance_summary()
+    
+    def _find_vicinity_linear(self, ownship_state: AircraftState, 
+                             radius_nm: float, altitude_window_ft: float) -> List[AircraftState]:
+        """Fallback linear search for vicinity aircraft (deprecated - use VicinityIndex)."""
+        # This method is kept for backward compatibility
+        # but now delegates to the VicinityIndex
+        return self.vicinity_index.query_vicinity(ownship_state, radius_nm, altitude_window_ft)
+    
+    
+    def export_to_jsonl(self, ownship_id: str, output_dir: str, 
+                        vicinity_radius_nm: float = 100.0,
+                        altitude_window_ft: float = 5000.0) -> Tuple[str, str]:
+        """Export ownship track and base intruders to normalized JSONL format.
+        
+        Args:
+            ownship_id: Target ownship callsign
+            output_dir: Output directory for JSONL files
+            vicinity_radius_nm: Vicinity search radius in NM
+            altitude_window_ft: Altitude window in feet
+            
+        Returns:
+            Tuple of (ownship_track_path, base_intruders_path)
+        """
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Load all aircraft states
+        all_states = self.load_scenario(max_flights=len(self.flight_files), time_window_minutes=0)
+        if not all_states:
+            raise ValueError("No aircraft states loaded from SCAT data")
+        
+        # Build spatial index for vicinity searches
+        self.build_spatial_index(all_states)
+        
+        # Separate ownship and other aircraft
+        ownship_states = [s for s in all_states if s.aircraft_id == ownship_id]
+        if not ownship_states:
+            raise ValueError(f"No states found for ownship {ownship_id}")
+        
+        # Export ownship track
+        ownship_file = output_path / f"ownship_track_{ownship_id}.jsonl"
+        with open(ownship_file, 'w') as f:
+            for state in sorted(ownship_states, key=lambda s: s.timestamp):
+                record = {
+                    'timestamp': state.timestamp.isoformat(),
+                    'aircraft_id': state.aircraft_id,
+                    'callsign': getattr(state, 'callsign', state.aircraft_id),
+                    'latitude': state.latitude,
+                    'longitude': state.longitude,
+                    'altitude_ft': state.altitude_ft,
+                    'ground_speed_kt': state.ground_speed_kt,
+                    'heading_deg': state.heading_deg,
+                    'vertical_speed_fpm': state.vertical_speed_fpm,
+                    'aircraft_type': getattr(state, 'aircraft_type', 'UNKNOWN')
+                }
+                f.write(json.dumps(record) + '\n')
+        
+        # Find and export base intruders (vicinity aircraft)
+        intruders_file = output_path / f"base_intruders_{ownship_id}.jsonl"
+        intruder_states = []
+        intruder_ids = set()  # Track unique aircraft IDs to avoid duplicates
+        
+        # For each ownship position, find vicinity aircraft
+        for ownship_state in ownship_states:
+            vicinity_aircraft = self.find_vicinity_aircraft(
+                ownship_state, vicinity_radius_nm, altitude_window_ft
+            )
+            for aircraft in vicinity_aircraft:
+                aircraft_key = f"{aircraft.aircraft_id}_{aircraft.timestamp.isoformat()}"
+                if aircraft_key not in intruder_ids:
+                    intruder_ids.add(aircraft_key)
+                    intruder_states.append(aircraft)
+        
+        # Export intruder states
+        with open(intruders_file, 'w') as f:
+            for state in sorted(intruder_states, key=lambda s: (s.aircraft_id, s.timestamp)):
+                record = {
+                    'timestamp': state.timestamp.isoformat(),
+                    'aircraft_id': state.aircraft_id,
+                    'callsign': getattr(state, 'callsign', state.aircraft_id),
+                    'latitude': state.latitude,
+                    'longitude': state.longitude,
+                    'altitude_ft': state.altitude_ft,
+                    'ground_speed_kt': state.ground_speed_kt,
+                    'heading_deg': state.heading_deg,
+                    'vertical_speed_fpm': state.vertical_speed_fpm,
+                    'aircraft_type': getattr(state, 'aircraft_type', 'UNKNOWN'),
+                    'proximity_to_ownship': True
+                }
+                f.write(json.dumps(record) + '\n')
+        
+        logger.info(f"Exported SCAT data to JSONL:")
+        logger.info(f"  Ownship track: {ownship_file} ({len(ownship_states)} records)")
+        logger.info(f"  Base intruders: {intruders_file} ({len(intruder_states)} records)")
+        
+        return str(ownship_file), str(intruders_file)
+
+    def get_flight_summary(self) -> Dict[str, Any]:
+        """Get summary of flights in the dataset.
+        
+        Returns:
+            Dictionary with flight summary information
+        """
+        summary = {
+            'total_flights': len(self.flight_files),
+            'dataset_path': str(self.dataset_path),
+            'use_kdtree': self.use_kdtree,
+            'spatial_index_available': self.spatial_index is not None
+        }
+        
+        # Add vicinity performance if available
+        if hasattr(self, 'vicinity_index'):
+            summary.update(self.vicinity_index.get_performance_summary())
+        
+        return summary
+
     def load_flight_record(self, file_path: Path) -> Optional[SCATFlightRecord]:
         """Load a single SCAT flight record from JSON file.
         
@@ -269,49 +718,6 @@ class SCATAdapter:
         logger.info(f"Time range: {earliest_time} to {latest_time}")
         
         return sorted(all_states, key=lambda s: s.timestamp)
-    
-    def get_flight_summary(self) -> Dict[str, Any]:
-        """Get summary statistics of the SCAT dataset.
-        
-        Returns:
-            Dictionary with dataset statistics
-        """
-        summary = {
-            'total_files': len(self.flight_files),
-            'aircraft_types': set(),
-            'airports': set(),
-            'callsigns': set(),
-            'time_range': {'earliest': None, 'latest': None}
-        }
-        
-        # Sample first 100 files for statistics
-        sample_files = self.flight_files[:100]
-        
-        for flight_file in sample_files:
-            flight_record = self.load_flight_record(flight_file)
-            if not flight_record:
-                continue
-            
-            summary['aircraft_types'].add(flight_record.aircraft_type)
-            summary['airports'].add(flight_record.adep)
-            summary['airports'].add(flight_record.ades)
-            summary['callsigns'].add(flight_record.callsign)
-            
-            # Track time bounds
-            if (summary['time_range']['earliest'] is None or 
-                flight_record.start_time < summary['time_range']['earliest']):
-                summary['time_range']['earliest'] = flight_record.start_time
-            
-            if (summary['time_range']['latest'] is None or 
-                flight_record.end_time > summary['time_range']['latest']):
-                summary['time_range']['latest'] = flight_record.end_time
-        
-        # Convert sets to sorted lists for JSON serialization
-        summary['aircraft_types'] = sorted(summary['aircraft_types'])
-        summary['airports'] = sorted(summary['airports'])
-        summary['callsigns'] = sorted(summary['callsigns'])
-        
-        return summary
 
 
 def load_scat_scenario(dataset_path: str, max_flights: int = 50, 
