@@ -500,7 +500,7 @@ class SCATAdapter:
         """Get summary of flights in the dataset.
         
         Returns:
-            Dictionary with flight summary information
+            Dictionary with flight summary information including callsigns
         """
         summary = {
             'total_flights': len(self.flight_files),
@@ -508,6 +508,20 @@ class SCATAdapter:
             'use_kdtree': self.use_kdtree,
             'spatial_index_available': self.spatial_index is not None
         }
+        
+        # Extract callsigns from flight files
+        callsigns = []
+        for flight_file in self.flight_files[:100]:  # Limit to first 100 for performance
+            try:
+                flight_record = self.load_flight_record(flight_file)
+                if flight_record and flight_record.callsign != 'UNKNOWN':
+                    callsigns.append(flight_record.callsign)
+            except Exception as e:
+                logger.warning(f"Could not load callsign from {flight_file.name}: {e}")
+                continue
+        
+        summary['callsigns'] = callsigns
+        summary['available_callsigns'] = len(callsigns)
         
         # Add vicinity performance if available
         if hasattr(self, 'vicinity_index'):

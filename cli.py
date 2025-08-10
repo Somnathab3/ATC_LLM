@@ -1199,13 +1199,13 @@ def cmd_run_e2e(args: argparse.Namespace) -> int:
         # Create ownship aircraft (CRE command)
         print(f"[STAGE 3] Creating ownship aircraft: {selected_ownship}")
         success = bs_client.create_aircraft(
-            callsign=selected_ownship,
+            cs=selected_ownship,
             actype=first_state.get('aircraft_type', 'B737'),
             lat=first_state['latitude'],
             lon=first_state['longitude'],
-            hdg=int(first_state['heading_deg']),
-            alt=int(first_state['altitude_ft']),
-            spd=int(first_state.get('ground_speed_kt', 450))
+            hdg_deg=int(first_state['heading_deg']),
+            alt_ft=int(first_state['altitude_ft']),
+            spd_kt=int(first_state.get('ground_speed_kt', 450))
         )
         
         if not success:
@@ -1279,7 +1279,7 @@ def cmd_run_e2e(args: argparse.Namespace) -> int:
         flight_record = FlightRecord(
             flight_id=selected_ownship,
             callsign=selected_ownship,
-            aircraft_type=first_state.get('aircraft_type', 'B737'),
+            aircraft_type=first_state.get('aircraft_type') or 'B737',
             waypoints=waypoints,
             altitudes_ft=altitudes,
             timestamps=timestamps,
