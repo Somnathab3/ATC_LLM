@@ -198,8 +198,32 @@ class BlueSkyClient:
         return self.stack(f"{cs} VS {int(round(vs_fpm))}")
 
     def direct_to(self, cs: str, wpt: str) -> bool:
-        """Direct aircraft to waypoint using DCT command."""
-        return self.stack(f"{cs} DCT {wpt}")
+        """Direct aircraft to waypoint using DIRECTTO command.
+        
+        Uses BlueSky DIRECTTO command (synonym DIRTO) as specified in the
+        BlueSky Command Reference / Command Table.
+        
+        Args:
+            cs: Aircraft callsign
+            wpt: Waypoint name or identifier
+            
+        Returns:
+            True if DIRECTTO command executed successfully, False otherwise
+        """
+        # Try DIRECTTO first, fall back to DIRTO if needed
+        result = self.stack(f"{cs} DIRECTTO {wpt}")
+        if result:
+            log.info(f"Successfully issued DIRECTTO {wpt} for {cs}")
+            return True
+        else:
+            # Try the synonym DIRTO as fallback
+            result = self.stack(f"{cs} DIRTO {wpt}")
+            if result:
+                log.info(f"Successfully issued DIRTO {wpt} for {cs}")
+                return True
+            else:
+                log.warning(f"Failed to issue DIRECTTO/DIRTO {wpt} for {cs}")
+                return False
 
     def add_waypoint(self, cs: str, lat: float, lon: float, alt_ft: Optional[float] = None) -> bool:
         """Add a waypoint to aircraft's flight plan using ADDWPT command.
