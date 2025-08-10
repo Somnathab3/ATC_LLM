@@ -10,6 +10,7 @@ Defines structured data models for:
 
 from typing import List, Optional, Dict, Any, Tuple, Union
 from pydantic import BaseModel, Field, field_validator
+from pydantic_settings import BaseSettings
 from datetime import datetime
 from enum import Enum
 from dataclasses import dataclass, field, asdict
@@ -204,8 +205,12 @@ class LLMResolutionInput(BaseModel):
         extra = "allow"
 
 
-class ConfigurationSettings(BaseModel):
-    """System configuration parameters."""
+class ConfigurationSettings(BaseSettings):
+    """System configuration parameters with environment variable support.
+    
+    Environment variables should be prefixed with ATC_LLM_
+    For example: ATC_LLM_LLM_MODEL_NAME=llama3.1:8b
+    """
     
     # Timing settings
     polling_interval_min: float = Field(5.0, gt=0, description="Polling interval in minutes")
@@ -227,6 +232,7 @@ class ConfigurationSettings(BaseModel):
     llm_model_name: str = Field("llama3.1:8b", description="LLM model identifier")
     llm_temperature: float = Field(0.1, ge=0, le=1)
     llm_max_tokens: int = Field(2048, gt=0)
+    ollama_base_url: str = Field("http://localhost:11434", description="Ollama API base URL")
     
     # Safety settings
     safety_buffer_factor: float = Field(1.2, gt=1.0, description="Safety margin multiplier")
@@ -236,14 +242,21 @@ class ConfigurationSettings(BaseModel):
     
     # Enhanced validation settings
     enforce_ownship_only: bool = Field(True, description="Enforce ownship-only commands")
+    ownship_only: bool = Field(True, description="Alias for enforce_ownship_only (for backwards compatibility)")
     max_climb_rate_fpm: float = Field(3000.0, gt=0, description="Maximum climb rate in feet per minute")
     max_descent_rate_fpm: float = Field(3000.0, gt=0, description="Maximum descent rate in feet per minute")
     min_flight_level: int = Field(100, ge=0, description="Minimum flight level (FL)")
     max_flight_level: int = Field(600, ge=100, description="Maximum flight level (FL)")
     max_heading_change_deg: float = Field(90.0, gt=0, le=180, description="Maximum heading change in degrees")
     
+    # Simulation control
+    lookahead_min: float = Field(10.0, gt=0, description="Alias for lookahead_time_min")
+    real_time_mode: bool = Field(False, description="Enable real-time simulation mode")
+    
     # Dual LLM engine settings
     enable_dual_llm: bool = Field(True, description="Enable dual LLM engines (horizontal -> vertical)")
+    horizontal_engine_enabled: bool = Field(True, description="Enable horizontal conflict resolution engine")
+    vertical_engine_enabled: bool = Field(True, description="Enable vertical conflict resolution engine")
     horizontal_retry_count: int = Field(2, ge=1, le=5, description="Max retries for horizontal engine")
     vertical_retry_count: int = Field(2, ge=1, le=5, description="Max retries for vertical engine")
     
@@ -255,6 +268,13 @@ class ConfigurationSettings(BaseModel):
     # Fast-time simulation
     fast_time: bool = Field(True, description="If True, do not wall-sleep; advance sim time only")
     sim_accel_factor: float = Field(1.0, gt=0, description="Multiply simulated step length per cycle")
+    
+    class Config:
+        """Pydantic configuration."""
+        env_prefix = "ATC_LLM_"
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
 
 
 class FlightRecord(BaseModel):

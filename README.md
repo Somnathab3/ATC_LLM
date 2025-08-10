@@ -54,10 +54,10 @@ ollama serve
 
 ```bash
 # Check system health
-python cli.py health-check
+atc-llm health-check
 
 # Run a basic simulation
-python bin/complete_llm_demo.py
+atc-llm simulate basic --aircraft 5 --duration-min 30
 ```
 
 ## 🚀 Key Features (Updated)
@@ -68,7 +68,7 @@ The system now includes comprehensive automatic reporting functionality with det
 
 **Run enhanced reporting demonstration:**
 ```bash
-python cli.py enhanced-reporting --flights 3 --intruders 5
+atc-llm report --flights 3 --intruders 5
 ```
 
 **Features:**
@@ -1088,74 +1088,68 @@ config = ConfigurationSettings(
 
 ### Available Commands
 
-The system provides a comprehensive CLI interface and multiple specialized scripts:
+The system provides a unified CLI interface with comprehensive subcommands:
 
-#### CLI Commands (Recommended)
+#### Unified CLI Commands
 
 ```bash
 # System management
-python cli.py health-check                    # Verify system components
-python cli.py start-server                    # Launch REST API server
-python cli.py verify-llm                      # Test LLM connectivity
+atc-llm health-check                          # Verify system health
+atc-llm verify-llm                            # Test LLM connectivity
 
-# Simulation commands
-python cli.py simulate basic                  # Basic conflict detection demo
-python cli.py simulate scat                   # SCAT data integration demo
-python cli.py enhanced-reporting              # Advanced metrics demo
-
-# Analysis and reporting
-python cli.py scat-baseline                   # Generate SCAT baseline analysis
-python cli.py scat-llm-run                    # Run real-time LLM simulation
-python cli.py wolfgang-metrics                # Research-standard metrics
-python cli.py visualize-conflicts             # Conflict visualization
+# Simulation commands  
+atc-llm simulate basic                        # Basic conflict detection demo
+atc-llm simulate --scat-dir /path/to/scat     # SCAT data integration demo
+atc-llm report --flights 3 --intruders 5     # Enhanced reporting demo
 
 # Batch processing
-python cli.py batch production                # Production batch processing
-python cli.py compare baseline-llm            # Baseline vs LLM comparison
+atc-llm batch --scat-dir /path/to/scat        # Production batch processing
+atc-llm metrics --events events.csv          # Wolfgang metrics analysis
 
-# Testing
-python cli.py test                            # Run test suite
-```
-
-#### Specialized Scripts
-
-```bash
-# Direct script execution for advanced users
-python bin/complete_llm_demo.py              # Basic LLM demo
-python bin/complete_scat_llm_simulation.py   # Full SCAT+LLM simulation
-python bin/enhanced_scat_llm_simulation.py   # Advanced navigation demo
-python bin/scat_baseline.py                  # SCAT baseline generator
-python bin/scat_llm_run.py                   # Real-time SCAT LLM runner
-python bin/verify_llm_communication.py       # LLM connectivity test
-python bin/visualize_conflicts.py            # Conflict visualization tool
-python bin/organize_output_structure.py      # Output organization utility
+# Visualization
+atc-llm visualize --data-file results.json   # Conflict visualization
 ```
 
 #### Quick Examples
 
 **Run system health check:**
 ```bash
-python cli.py health-check
+atc-llm health-check
 ```
 
 **Run basic conflict detection demo:**
 ```bash
-python cli.py simulate basic --aircraft 3 --duration 15
+atc-llm simulate basic --aircraft 3 --duration-min 15
 ```
 
 **Process real aviation data (SCAT files):**
 ```bash
-python cli.py scat-llm-run --ownship sample_data/100000.json --realtime
+atc-llm simulate --scat-dir sample_data/ --ownship NAX3580 --real-time
 ```
 
 **Generate research metrics:**
 ```bash
-python cli.py wolfgang-metrics --input reports/simulation_data.csv
+atc-llm metrics --events simulation_events.csv --output metrics.csv
 ```
 
 **Run enhanced reporting demo:**
 ```bash
-python cli.py enhanced-reporting --flights 5 --intruders 8
+atc-llm report --flights 5 --intruders 8
+```
+
+### Advanced Options
+
+All commands support configuration via environment variables:
+
+```bash
+# Override LLM model
+ATC_LLM_LLM_MODEL_NAME=llama3.1:70b atc-llm simulate basic
+
+# Override safety parameters
+ATC_LLM_MIN_HORIZONTAL_SEPARATION_NM=8.0 atc-llm simulate --scat-dir /data/scat
+
+# View current configuration
+atc-llm --dump-config
 ```
 
 ### Basic Simulation

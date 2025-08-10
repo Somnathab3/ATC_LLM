@@ -13,6 +13,7 @@ import re
 import json
 import logging
 import subprocess
+from typing import List, Dict, Any, Union
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 from types import SimpleNamespace
@@ -515,6 +516,48 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
         return {}
 
     # ---------- PUBLIC HIGH-LEVEL CALLS ----------
+    
+    def get_available_models(self) -> List[str]:
+        """Get list of available models from Ollama server."""
+        if self.use_mock:
+            # Return mock models for testing
+            return ["llama3.1:8b", "llama2:7b", "mistral:7b"]
+        
+        try:
+            # Query Ollama API for available models
+            import requests
+            response = requests.get(f"{self.host}/api/tags", timeout=self.timeout)
+            response.raise_for_status()
+            
+            data = response.json()
+            models = []
+            
+            if "models" in data:
+                for model in data["models"]:
+                    if "name" in model:
+                        models.append(model["name"])
+            
+            return models
+            
+        except Exception as e:
+            print(f"[WARNING] Could not fetch available models: {e}")
+            # Return current model as fallback
+            return [self.model_name]
+    
+    def generate_response(self, prompt: str) -> str:
+        """Generate a simple text response from the LLM."""
+        if self.use_mock:
+            return "Mock response: Connection successful. This is a test response from the mock LLM client."
+        
+        try:
+            # Use the existing _call_llm method with force_json=False for text response
+            response = self._call_llm(prompt, force_json=False)
+            return response.strip()
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to generate response: {e}")
+            return ""
+    
     def detect_conflicts(self, input_data, use_enhanced: bool = False) -> Any:
         """Unified detect conflicts method with enhanced/simple mode selection"""
         # Handle both schema objects and dict/string inputs

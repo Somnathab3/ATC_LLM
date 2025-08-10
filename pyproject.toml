@@ -21,7 +21,10 @@ classifiers = [
 ]
 
 [project.scripts]
-atc-llm = "cli:main"
+atc-llm = "src.atc_llm_cli:console_main"
+
+[tool.setuptools]
+packages = ["src", "src.cdr", "src.api", "src.data", "src.utils"]
 
 [project.optional-dependencies]
 dev = [

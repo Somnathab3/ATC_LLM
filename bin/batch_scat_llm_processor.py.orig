@@ -1,0 +1,428 @@
+#!/usr/bin/env python3
+"""
+Complete Batch Processing Solution for SCAT Dataset + BlueSky + LLM
+
+This script provides a robust batch processing system that:
+1. Loads multiple SCAT flight records from a directory
+2. Integrates with BlueSky simulator for realistic ATC simulation
+3. Uses LLM-based conflict detection and resolution
+4. Generates comprehensive metrics and reports
+
+Usage:
+    python batch_scat_llm_processor.py --scat-dir /path/to/scat/files --max-flights 5
+"""
+
+import sys
+from pathlib import Path
+
+# Add the project to path
+script_dir = Path(__file__).parent
+project_root = script_dir.parent
+sys.path.insert(0, str(project_root))
+
+import logging
+import argparse
+import json
+import glob
+import os
+from datetime import datetime, timedelta
+from typing import List, Dict, Any, Optional
+
+# Import project modules
+from src.cdr.pipeline import CDRPipeline
+from src.cdr.schemas import (
+    ConfigurationSettings, FlightRecord, MonteCarloParameters, 
+    BatchSimulationResult
+)
+from src.cdr.scat_adapter import SCATAdapter
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("batch_scat_llm")
+
+
+class SCATBatchProcessor:
+    """Complete SCAT batch processing with BlueSky and LLM integration."""
+    
+    def __init__(self, scat_directory: str, config: ConfigurationSettings):
+        self.scat_directory = Path(scat_directory)
+        self.config = config
+        self.scat_adapter = SCATAdapter(str(self.scat_directory))
+        
+        # Validate SCAT directory exists
+        if not self.scat_directory.exists():
+            raise FileNotFoundError(f"SCAT directory not found: {self.scat_directory}")
+        
+        logger.info(f"Initialized SCAT batch processor for directory: {self.scat_directory}")
+    
+    def discover_scat_files(self, pattern: str = "*.json", max_files: Optional[int] = None) -> List[Path]:
+        """Discover SCAT files in the directory."""
+        scat_files = list(self.scat_directory.glob(pattern))
+        
+        if not scat_files:
+            logger.warning(f"No SCAT files found with pattern {pattern} in {self.scat_directory}")
+            return []
+        
+        # Sort for consistent processing order
+        scat_files.sort()
+        
+        if max_files:
+            scat_files = scat_files[:max_files]
+        
+        logger.info(f"Discovered {len(scat_files)} SCAT files for processing")
+        return scat_files
+    
+    def load_flight_records(self, scat_files: List[Path]) -> List[FlightRecord]:
+        """Load flight records from SCAT files."""
+        flight_records = []
+        
+        for scat_file in scat_files:
+            try:
+                flight_record = self._load_single_flight(scat_file)
+                if flight_record:
+                    flight_records.append(flight_record)
+                    logger.debug(f"Loaded flight {flight_record.flight_id} from {scat_file.name}")
+                else:
+                    logger.warning(f"Failed to load flight from {scat_file.name}")
+            except Exception as e:
+                logger.error(f"Error loading {scat_file.name}: {e}")
+                continue
+        
+        logger.info(f"Successfully loaded {len(flight_records)} flight records")
+        return flight_records
+    
+    def _load_single_flight(self, scat_file: Path) -> Optional[FlightRecord]:
+        """Load a single flight record from SCAT file."""
+        try:
+            # Load SCAT flight record using the adapter
+            scat_record = self.scat_adapter.load_flight_record(scat_file)
+            
+            if not scat_record:
+                logger.warning(f"Failed to parse SCAT file {scat_file}")
+                return None
+            
+            # Extract aircraft states
+            aircraft_states = self.scat_adapter.extract_aircraft_states(scat_record)
+            
+            if not aircraft_states:
+                logger.warning(f"No aircraft states found in {scat_file}")
+                return None
+            
+            # Sort by timestamp
+            aircraft_states.sort(key=lambda s: s.timestamp)
+            
+            # Build flight record from SCAT data
+            waypoints = [(state.latitude, state.longitude) for state in aircraft_states]
+            altitudes = [state.altitude_ft for state in aircraft_states]
+            timestamps = [state.timestamp for state in aircraft_states]
+            
+            # Use SCAT data for aircraft info
+            aircraft_type = scat_record.aircraft_type or "B737"
+            flight_id = scat_record.callsign or scat_file.stem
+            callsign = aircraft_states[0].callsign if aircraft_states[0].callsign else flight_id
+            
+            # Calculate cruise speed from track data
+            if len(aircraft_states) > 1:
+                total_speed = sum(state.ground_speed_kt for state in aircraft_states)
+                cruise_speed = total_speed / len(aircraft_states)
+            else:
+                cruise_speed = 420.0
+            
+            # Determine scenario complexity based on flight characteristics
+            complexity_level = self._assess_complexity(aircraft_states, waypoints)
+            
+            flight_record = FlightRecord(
+                flight_id=flight_id,
+                callsign=callsign,
+                aircraft_type=aircraft_type,
+                waypoints=waypoints,
+                altitudes_ft=altitudes,
+                timestamps=timestamps,
+                cruise_speed_kt=cruise_speed,
+                climb_rate_fpm=2000.0,
+                descent_rate_fpm=-1500.0,
+                scenario_type="scat_real_data",
+                complexity_level=complexity_level
+            )
+            
+            return flight_record
+            
+        except Exception as e:
+            logger.error(f"Error processing SCAT file {scat_file}: {e}")
+            return None
+    
+    def _assess_complexity(self, aircraft_states: list, waypoints: list) -> int:
+        """Assess scenario complexity based on flight characteristics."""
+        complexity = 1
+        
+        # Factor 1: Number of waypoints (more waypoints = more complex)
+        if len(waypoints) > 50:
+            complexity += 2
+        elif len(waypoints) > 20:
+            complexity += 1
+        
+        # Factor 2: Altitude variations
+        if aircraft_states:
+            altitudes = [state.altitude_ft for state in aircraft_states]
+            altitude_range = max(altitudes) - min(altitudes)
+            if altitude_range > 10000:
+                complexity += 2
+            elif altitude_range > 5000:
+                complexity += 1
+        
+        # Factor 3: Speed variations
+        if aircraft_states:
+            speeds = [state.ground_speed_kt for state in aircraft_states]
+            speed_range = max(speeds) - min(speeds)
+            if speed_range > 100:
+                complexity += 1
+        
+        return min(complexity, 5)  # Cap at 5
+    
+    def run_batch_simulation(self, 
+                           max_files: Optional[int] = None,
+                           monte_carlo_params: Optional[MonteCarloParameters] = None) -> BatchSimulationResult:
+        """Run complete batch simulation with SCAT + BlueSky + LLM."""
+        
+        logger.info("=== Starting SCAT Batch Processing with BlueSky + LLM ===")
+        
+        # Step 1: Discover SCAT files
+        scat_files = self.discover_scat_files(max_files=max_files)
+        if not scat_files:
+            raise ValueError("No SCAT files found for processing")
+        
+        # Step 2: Load flight records
+        flight_records = self.load_flight_records(scat_files)
+        if not flight_records:
+            raise ValueError("No valid flight records could be loaded")
+        
+        # Step 3: Configure Monte Carlo parameters if not provided
+        if monte_carlo_params is None:
+            monte_carlo_params = MonteCarloParameters(
+                scenarios_per_flight=5,  # Reasonable default for batch processing
+                intruder_count_range=(2, 6),
+                conflict_zone_radius_nm=50.0,
+                non_conflict_zone_radius_nm=150.0,
+                altitude_spread_ft=8000.0,
+                time_window_min=45.0,
+                conflict_timing_variance_min=10.0,
+                conflict_probability=0.4,  # 40% chance of conflicts
+                speed_variance_kt=50.0,
+                heading_variance_deg=30.0,
+                realistic_aircraft_types=True,
+                airway_based_generation=False,
+                weather_influence=False
+            )
+        
+        # Step 4: Initialize CDR Pipeline with BlueSky and LLM
+        logger.info("Initializing CDR Pipeline with BlueSky and LLM...")
+        try:
+            pipeline = CDRPipeline(self.config)
+            logger.info("[OK] CDR Pipeline initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize CDR Pipeline: {e}")
+            raise
+        
+        # Step 5: Run batch simulation
+        try:
+            logger.info(f"Running batch simulation for {len(flight_records)} flights...")
+            logger.info(f"Total scenarios to process: {len(flight_records) * monte_carlo_params.scenarios_per_flight}")
+            
+            batch_result = pipeline.run_for_flights(
+                flight_records=flight_records,
+                monte_carlo_params=monte_carlo_params
+            )
+            
+            logger.info("[OK] Batch simulation completed successfully")
+            return batch_result
+            
+        except Exception as e:
+            logger.error(f"Batch simulation failed: {e}")
+            raise
+        finally:
+            # Clean up pipeline
+            try:
+                pipeline.stop()
+            except Exception:
+                pass
+    
+    def save_results(self, batch_result: BatchSimulationResult, output_dir: str = "Output"):
+        """Save batch processing results to files."""
+        output_path = Path(output_dir)
+        output_path.mkdir(exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Save complete results as JSON
+        results_file = output_path / f"scat_batch_results_{timestamp}.json"
+        with open(results_file, 'w') as f:
+            # Convert to dict for JSON serialization
+            result_dict = batch_result.model_dump() if hasattr(batch_result, 'model_dump') else batch_result.__dict__
+            json.dump(result_dict, f, indent=2, default=str)
+        
+        logger.info(f"Results saved to {results_file}")
+        
+        # Save summary as CSV
+        summary_file = output_path / f"scat_batch_summary_{timestamp}.csv"
+        self._save_summary_csv(batch_result, summary_file)
+        
+        logger.info(f"Summary saved to {summary_file}")
+    
+    def _save_summary_csv(self, batch_result: BatchSimulationResult, csv_file: Path):
+        """Save summary results as CSV."""
+        import csv
+        
+        with open(csv_file, 'w', newline='') as f:
+            writer = csv.writer(f)
+            
+            # Write header
+            writer.writerow([
+                'Simulation_ID', 'Total_Flights', 'Total_Scenarios', 'Conflicts_Detected',
+                'Resolutions_Attempted', 'Successful_Resolutions', 'Success_Rate_%',
+                'Avg_Resolution_Time_Sec', 'Min_Separation_NM', 'Safety_Violations'
+            ])
+            
+            # Calculate success rate
+            success_rate = 0.0
+            if batch_result.total_resolutions_attempted > 0:
+                success_rate = (batch_result.successful_resolutions / batch_result.total_resolutions_attempted) * 100
+            
+            # Write data
+            writer.writerow([
+                batch_result.simulation_id,
+                len(batch_result.flight_records),
+                batch_result.total_scenarios,
+                batch_result.total_conflicts_detected,
+                batch_result.total_resolutions_attempted,
+                batch_result.successful_resolutions,
+                f"{success_rate:.1f}",
+                f"{batch_result.average_resolution_time_sec:.2f}",
+                f"{batch_result.minimum_separation_achieved_nm:.2f}",
+                batch_result.safety_violations
+            ])
+
+
+def create_default_config() -> ConfigurationSettings:
+    """Create default configuration for batch processing."""
+    return ConfigurationSettings(
+        # Simulation parameters
+        polling_interval_min=1.0,
+        lookahead_time_min=10.0,
+        min_horizontal_separation_nm=5.0,
+        min_vertical_separation_ft=1000.0,
+        
+        # LLM parameters
+        llm_model_name="llama-3.1-8b",
+        llm_temperature=0.1,
+        llm_max_tokens=2048,
+        
+        # Safety parameters
+        safety_buffer_factor=1.2,
+        max_resolution_angle_deg=45.0,
+        max_altitude_change_ft=2000.0,
+        
+        # BlueSky parameters
+        bluesky_host="localhost",
+        bluesky_port=1337,
+        bluesky_timeout_sec=10.0,
+        fast_time=True,
+        sim_accel_factor=1.0
+    )
+
+
+def main():
+    """Main entry point for batch processing."""
+    parser = argparse.ArgumentParser(description='SCAT Batch Processing with BlueSky and LLM')
+    parser.add_argument('--scat-dir', type=str, required=True,
+                       help='Directory containing SCAT files')
+    parser.add_argument('--max-flights', type=int, default=3,
+                       help='Maximum number of flights to process (default: 3)')
+    parser.add_argument('--scenarios-per-flight', type=int, default=5,
+                       help='Number of Monte Carlo scenarios per flight (default: 5)')
+    parser.add_argument('--output-dir', type=str, default='Output',
+                       help='Output directory for results (default: Output)')
+    parser.add_argument('--bluesky-host', type=str, default='localhost',
+                       help='BlueSky host (default: localhost)')
+    parser.add_argument('--bluesky-port', type=int, default=1337,
+                       help='BlueSky port (default: 1337)')
+    parser.add_argument('--llm-model', type=str, default='llama-3.1-8b',
+                       help='LLM model name (default: llama-3.1-8b)')
+    parser.add_argument('--verbose', action='store_true',
+                       help='Enable verbose logging')
+    
+    args = parser.parse_args()
+    
+    # Configure logging level
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    
+    # Create configuration
+    config = create_default_config()
+    config.bluesky_host = args.bluesky_host
+    config.bluesky_port = args.bluesky_port
+    config.llm_model_name = args.llm_model
+    
+    # Create Monte Carlo parameters
+    monte_carlo_params = MonteCarloParameters(
+        scenarios_per_flight=args.scenarios_per_flight,
+        intruder_count_range=(2, 6),
+        conflict_zone_radius_nm=50.0,
+        non_conflict_zone_radius_nm=150.0,
+        altitude_spread_ft=8000.0,
+        time_window_min=45.0,
+        conflict_timing_variance_min=10.0,
+        conflict_probability=0.4,
+        speed_variance_kt=50.0,
+        heading_variance_deg=30.0,
+        realistic_aircraft_types=True,
+        airway_based_generation=False,
+        weather_influence=False
+    )
+    
+    try:
+        # Initialize processor
+        processor = SCATBatchProcessor(args.scat_dir, config)
+        
+        # Run batch simulation
+        logger.info(f"Starting batch processing with max {args.max_flights} flights...")
+        batch_result = processor.run_batch_simulation(
+            max_files=args.max_flights,
+            monte_carlo_params=monte_carlo_params
+        )
+        
+        # Save results
+        processor.save_results(batch_result, args.output_dir)
+        
+        # Print summary
+        logger.info("=== BATCH PROCESSING SUMMARY ===")
+        logger.info(f"Simulation ID: {batch_result.simulation_id}")
+        logger.info(f"Total flights processed: {len(batch_result.flight_records)}")
+        logger.info(f"Total scenarios: {batch_result.total_scenarios}")
+        logger.info(f"Conflicts detected: {batch_result.total_conflicts_detected}")
+        logger.info(f"Resolutions attempted: {batch_result.total_resolutions_attempted}")
+        logger.info(f"Successful resolutions: {batch_result.successful_resolutions}")
+        
+        if batch_result.total_resolutions_attempted > 0:
+            success_rate = (batch_result.successful_resolutions / batch_result.total_resolutions_attempted) * 100
+            logger.info(f"Resolution success rate: {success_rate:.1f}%")
+        
+        logger.info(f"Average resolution time: {batch_result.average_resolution_time_sec:.2f} seconds")
+        logger.info(f"Minimum separation achieved: {batch_result.minimum_separation_achieved_nm:.2f} NM")
+        logger.info(f"Safety violations: {batch_result.safety_violations}")
+        
+        logger.info("=== BATCH PROCESSING COMPLETED SUCCESSFULLY ===")
+        
+        return 0
+        
+    except Exception as e:
+        logger.error(f"Batch processing failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
+if __name__ == "__main__":
+    exit(main())
