@@ -183,6 +183,99 @@ def cmd_health_check(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_repo_clean(args: argparse.Namespace) -> int:
+    """Clean repository of old files and stale outputs."""
+    setup_logging(args.verbose)
+    
+    try:
+        from src.cdr.repo_cleanup import RepositoryCleanup
+        
+        print("[REPO CLEAN] Starting repository cleanup...")
+        
+        project_root = Path(__file__).parent
+        cleanup = RepositoryCleanup(project_root)
+        
+        if args.dry_run:
+            print("[DRY RUN] Scanning for cleanup candidates...")
+            summary = cleanup.dry_run()
+            
+            print(f"\n[DRY RUN RESULTS]")
+            print(f"Total items to clean: {summary['total_items']}")
+            print(f"Total size: {summary['total_size_mb']:.1f} MB")
+            
+            for category, info in summary['categories'].items():
+                if info['count'] > 0:
+                    print(f"  {category}: {info['count']} items ({info['size_mb']:.1f} MB)")
+                    if info['sample_files']:
+                        print(f"    Sample: {', '.join(info['sample_files'][:3])}")
+            
+            print(f"\nTo perform actual cleanup, run with --confirm")
+            return 0
+        
+        elif args.confirm:
+            print("[CLEANUP] Performing actual cleanup...")
+            result = cleanup.cleanup(categories=args.categories, confirm=True)
+            
+            print(f"\n[CLEANUP RESULTS]")
+            print(f"Items removed: {result['total_items_removed']}")
+            print(f"Space freed: {result['mb_freed']:.1f} MB")
+            
+            if result['errors']:
+                print(f"Errors encountered: {len(result['errors'])}")
+                for error in result['errors'][:5]:  # Show first 5 errors
+                    print(f"  {error}")
+            
+            print("[CLEANUP] Repository cleanup completed")
+            return 0
+        
+        else:
+            print("[ERROR] Must specify either --dry-run or --confirm")
+            return 1
+            
+    except ImportError as e:
+        print(f"[ERROR] Cleanup module not available: {e}")
+        return 1
+    except Exception as e:
+        print(f"[ERROR] Repository cleanup failed: {e}")
+        return 1
+
+
+def cmd_memory_stats(args: argparse.Namespace) -> int:
+    """Show LLM memory system statistics."""
+    setup_logging(args.verbose)
+    
+    try:
+        from src.cdr.memory import LLMMemorySystem
+        from pathlib import Path
+        
+        memory_file = Path(args.memory_file) if args.memory_file else Path("Output/llm_memory.jsonl")
+        
+        if not memory_file.exists():
+            print(f"[INFO] Memory file does not exist: {memory_file}")
+            return 0
+        
+        print(f"[MEMORY STATS] Loading memory from {memory_file}")
+        
+        memory_system = LLMMemorySystem(memory_file)
+        stats = memory_system.get_statistics()
+        
+        print(f"\n[MEMORY STATISTICS]")
+        print(f"Total experiences: {stats['total_experiences']}")
+        print(f"Success rate: {stats['success_rate']:.2%}")
+        print(f"Recent experiences (7 days): {stats['recent_experiences']}")
+        print(f"Memory file: {stats['memory_file']}")
+        print(f"Max records: {stats['max_records']}")
+        
+        return 0
+        
+    except ImportError as e:
+        print(f"[ERROR] Memory system not available: {e}")
+        return 1
+    except Exception as e:
+        print(f"[ERROR] Failed to get memory statistics: {e}")
+        return 1
+
+
 def cmd_simulate(args: argparse.Namespace) -> int:
     """Unified simulation command supporting basic, SCAT, and enhanced modes."""
     setup_logging(args.verbose)
@@ -1263,10 +1356,18 @@ def cmd_run_e2e(args: argparse.Namespace) -> int:
             bluesky_port=1337,
             bluesky_timeout_sec=5.0,
             fast_time=args.asof,
-            sim_accel_factor=args.tmult
+            sim_accel_factor=args.tmult,
+            # Enhanced features
+            memory_file=Path(args.results_dir) / "llm_memory.jsonl",
+            failure_analysis_file=Path(args.results_dir) / "llm_failures.jsonl",
+            enable_visualization=getattr(args, 'enable_visualization', False),
+            seed=args.seed
         )
         
-        print(f"[STAGE 4] ✅ Configuration created with adaptive cadence: {args.adaptive_cadence}")
+        print(f"[STAGE 4] ✅ Configuration created with enhanced features:")
+        print(f"   Memory file: {config.memory_file}")
+        print(f"   Failure analysis: {config.failure_analysis_file}")
+        print(f"   Adaptive cadence: {args.adaptive_cadence}")
         
         # Stage 5: Load scenario data and create flight records
         print("\n[STAGE 5] Scenario Preparation")
@@ -1580,6 +1681,24 @@ Examples:
     health_parser = subparsers.add_parser('health-check', help='Check system health')
     health_parser.set_defaults(func=cmd_health_check)
     
+    # Repository cleanup command
+    clean_parser = subparsers.add_parser('repo-clean', help='Clean repository of old files and stale outputs')
+    clean_parser.add_argument('--dry-run', action='store_true',
+                             help='Show what would be cleaned without actually removing files')
+    clean_parser.add_argument('--confirm', action='store_true',
+                             help='Confirm actual cleanup')
+    clean_parser.add_argument('--categories', nargs='+',
+                             choices=['old_demos', 'stale_outputs', 'backup_files', 
+                                     'temp_files', 'cache_files', 'archive_files'],
+                             help='Specific categories to clean')
+    clean_parser.set_defaults(func=cmd_repo_clean)
+    
+    # Memory statistics command
+    memory_parser = subparsers.add_parser('memory-stats', help='Show LLM memory system statistics')
+    memory_parser.add_argument('--memory-file', type=str,
+                              help='Path to memory file (default: Output/llm_memory.jsonl)')
+    memory_parser.set_defaults(func=cmd_memory_stats)
+    
     # Unified simulation command
     sim_parser = subparsers.add_parser('simulate', help='Run unified simulation (basic, SCAT, enhanced)')
     
@@ -1750,6 +1869,12 @@ Examples:
     # Reproducibility
     e2e_parser.add_argument('--seed', type=int, default=4242,
                            help='Random seed for reproducibility (default: 4242)')
+    
+    # Enhanced features
+    e2e_parser.add_argument('--enable-visualization', action='store_true',
+                           help='Enable real-time visualization (requires pygame)')
+    e2e_parser.add_argument('--memory-enabled', action='store_true', default=True,
+                           help='Enable LLM memory system (default: True)')
     
     e2e_parser.set_defaults(func=cmd_run_e2e)
     
