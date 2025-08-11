@@ -768,6 +768,18 @@ class CDRPipeline:
         self.last_snapshot_time = datetime.now()
         self.conflict_detected = False
         
+        # Track current scenario context for baseline verification
+        self._current_scenario_has_conflicts = None
+        
+        # Track active resolutions for cleanup and validation
+        self.active_resolutions: Dict[str, ResolutionCommand] = {}
+        
+        # Initialize memory system if available
+        if hasattr(self.llm_client, 'memory_system') and self.llm_client.memory_system:
+            self.memory_system = self.llm_client.memory_system
+        else:
+            self.memory_system = None
+        
         # Critical connections - MUST succeed or fail hard
         logger.info("Connecting to critical systems...")
         
@@ -905,7 +917,12 @@ class CDRPipeline:
         self.conflict_detected = any(c.is_conflict for c in conflicts)
         logger.info(f"Detected {len(conflicts)} potential conflicts, active conflicts: {self.conflict_detected}")
         
-        # Step 3.5: Calculate adaptive polling interval based on conflicts and proximity
+        # Step 3.5: Baseline verification when expected conflicts but zero detected
+        scenario_has_conflicts = getattr(self, '_current_scenario_has_conflicts', None)
+        if scenario_has_conflicts and not self.conflict_detected:
+            self._perform_baseline_verification(ownship, traffic, conflicts)
+        
+        # Step 3.6: Calculate adaptive polling interval based on conflicts and proximity
         adaptive_interval = self.get_adaptive_polling_interval(ownship, traffic, conflicts)
         logger.debug(f"Adaptive polling interval: {adaptive_interval:.1f} minutes")
         
@@ -1124,6 +1141,124 @@ class CDRPipeline:
                 logger.error(f"Fallback conflict detection also failed: {fallback_error}")
                 return []
     
+    def _perform_baseline_verification(
+        self, 
+        ownship: Dict[str, Any], 
+        traffic: List[Dict[str, Any]], 
+        detected_conflicts: List[ConflictPrediction]
+    ) -> None:
+        """Perform baseline verification when scenario expects conflicts but none detected.
+        
+        This triggers LLM advice gathering without commanding BlueSky, useful for analyzing
+        scenarios where algorithmic detection failed but conflicts were expected.
+        
+        Args:
+            ownship: Current ownship state dict
+            traffic: Current traffic state dicts  
+            detected_conflicts: Currently detected conflicts (likely empty)
+        """
+        logger.info("[BASELINE VERIFICATION] Expected conflicts but zero detected - triggering LLM verification")
+        
+        try:
+            # Build enhanced detection prompt with CPA hints and memory
+            from .enhanced_cpa import calculate_cpa_3d
+            
+            # Calculate CPA hints for nearby traffic within 50 NM  
+            cpa_hints = []
+            for intruder in traffic[:5]:  # Limit to closest 5 for prompt brevity
+                try:
+                    cpa_result = calculate_cpa_3d(ownship, intruder)
+                    if cpa_result and cpa_result.get('distance_nm', 999) < 50:
+                        cpa_hints.append({
+                            'intruder_id': intruder.get('id', 'UNKNOWN'),
+                            'distance_nm': round(cpa_result.get('distance_nm', 0), 1),
+                            'time_to_cpa_min': round(cpa_result.get('time_to_cpa_sec', 0) / 60.0, 1),
+                            'min_separation_nm': round(cpa_result.get('min_separation_nm', 999), 1)
+                        })
+                except Exception as e:
+                    logger.debug(f"Failed to calculate CPA for baseline verification: {e}")
+                    continue
+            
+            # Retrieve past movements from memory if available
+            past_movements = []
+            if hasattr(self, 'memory_system') and self.memory_system:
+                try:
+                    similar_experiences = self.memory_system.retrieve_similar(k=3)
+                    past_movements = [exp.get('movement_summary', 'No prior movement') 
+                                    for exp in similar_experiences[:2]]
+                except Exception as e:
+                    logger.debug(f"Failed to retrieve memory for baseline verification: {e}")
+            
+            # Build verification prompt
+            config_dict = {
+                'lookahead_time_min': self.config.lookahead_time_min,
+                'min_horizontal_separation_nm': self.config.min_horizontal_separation_nm,
+                'min_vertical_separation_ft': self.config.min_vertical_separation_ft
+            }
+            
+            verify_prompt = self.llm_client.build_enhanced_detect_prompt(
+                ownship=ownship,
+                traffic=traffic[:5],  # Limit traffic for manageable prompt size
+                config=config_dict,
+                cpa_hints=cpa_hints
+            )
+            
+            # Add verification context to prompt
+            verify_context = f"""
+            
+BASELINE VERIFICATION MODE: This scenario was expected to have conflicts, but algorithmic detection found none.
+Please analyze the traffic situation and provide your assessment:
+
+CPA Analysis Hints: {json.dumps(cpa_hints, indent=2) if cpa_hints else 'None available'}
+
+Past Movement Context: {'; '.join(past_movements) if past_movements else 'No prior context'}
+
+QUESTION: Do you detect any potential conflicts that the algorithmic detector may have missed?
+Please provide detailed reasoning for your assessment."""
+            
+            full_prompt = verify_prompt + verify_context
+            
+            # Get LLM verification advice (no BlueSky commands)
+            logger.info("[BASELINE VERIFICATION] Requesting LLM analysis for missed conflicts...")
+            llm_advice = self.llm_client.generate_response(full_prompt)
+            
+            if llm_advice:
+                logger.info(f"[BASELINE VERIFICATION] LLM analysis received: {llm_advice[:200]}...")
+                
+                # Log to verification log file if configured
+                if hasattr(self.config, 'failure_analysis_file') and self.config.failure_analysis_file:
+                    verification_record = {
+                        'timestamp': datetime.now().isoformat(),
+                        'type': 'baseline_verification',
+                        'scenario_expected_conflicts': True,
+                        'algorithmic_conflicts_detected': len(detected_conflicts),
+                        'ownship_state': {
+                            'id': ownship.get('id'),
+                            'lat': ownship.get('lat'),
+                            'lon': ownship.get('lon'),
+                            'alt_ft': ownship.get('alt_ft'),
+                            'hdg': ownship.get('hdg'),
+                            'spd_kt': ownship.get('spd_kt')
+                        },
+                        'traffic_count': len(traffic),
+                        'cpa_hints': cpa_hints,
+                        'past_movements': past_movements,
+                        'llm_verification_advice': llm_advice
+                    }
+                    
+                    try:
+                        with open(self.config.failure_analysis_file, 'a') as f:
+                            f.write(json.dumps(verification_record) + '\n')
+                    except Exception as e:
+                        logger.warning(f"Failed to write baseline verification record: {e}")
+                        
+                logger.info("[BASELINE VERIFICATION] Completed - no BlueSky commands issued")
+            else:
+                logger.warning("[BASELINE VERIFICATION] LLM response failed")
+                
+        except Exception as e:
+            logger.error(f"[BASELINE VERIFICATION] Failed: {e}")
+
     def _handle_conflicts_enhanced(
         self, 
         conflicts: List[ConflictPrediction], 
@@ -1745,6 +1880,9 @@ Provide your resolution as JSON with fields: resolution_type (either "heading" o
         from .monte_carlo_intruders import FlightPathAnalyzer
         
         logger.debug(f"Running scenario {scenario.scenario_id}")
+        
+        # Set scenario context for baseline verification
+        self._current_scenario_has_conflicts = getattr(scenario, 'has_conflicts', False)
         
         # Reset BlueSky state
         self.bluesky_client.sim_reset()
