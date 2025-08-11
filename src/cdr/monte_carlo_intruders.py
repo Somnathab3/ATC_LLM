@@ -310,7 +310,8 @@ class MonteCarloIntruderGenerator:
         intruder_time = path_point.timestamp + time_variance
         
         # Generate spawn time offset (when intruder should enter simulation)
-        spawn_delay_min = self.rng.uniform(0.0, self.params.time_window_min * 0.5)
+        # For conflicting intruders, spawn very early to ensure conflicts
+        spawn_delay_min = self.rng.uniform(0.0, 2.0)  # Spawn within first 2 minutes for immediate conflict
         
         return AircraftState(
             aircraft_id=f"INTRUDER_{flight_record.flight_id}_{intruder_idx:02d}",

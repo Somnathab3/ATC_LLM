@@ -1392,17 +1392,18 @@ def cmd_run_e2e(args: argparse.Namespace) -> int:
         )
         
         # Monte Carlo parameters for intruder generation
+        # For E2E demos, ensure we get conflicts by setting high probability
         monte_carlo_params = MonteCarloParameters(
             scenarios_per_flight=1,
             intruder_count_range=(args.intruders, args.intruders),
-            conflict_zone_radius_nm=50.0,
+            conflict_zone_radius_nm=2.5,  # Much closer than detection range (5.0 nm) to guarantee conflict
             non_conflict_zone_radius_nm=args.vicinity_radius,
-            altitude_spread_ft=args.alt_window,
+            altitude_spread_ft=500.0,     # Even closer to vertical separation limit (1000 ft)
             time_window_min=60.0,
-            conflict_timing_variance_min=10.0,
-            conflict_probability=0.4 if args.spawn_dynamic else 0.3,
-            speed_variance_kt=50.0,
-            heading_variance_deg=45.0,
+            conflict_timing_variance_min=5.0,  # Reduced variance for better timing
+            conflict_probability=1.0,    # 100% probability to guarantee conflicts
+            speed_variance_kt=30.0,      # Reduced speed variance for more predictable conflicts
+            heading_variance_deg=30.0,   # Reduced heading variance for more predictable conflicts
             realistic_aircraft_types=True,
             airway_based_generation=True,
             weather_influence=False

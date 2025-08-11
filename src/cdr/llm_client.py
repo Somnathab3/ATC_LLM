@@ -548,44 +548,6 @@ Altitude resolution: {{"resolution_type": "altitude", "delta_ft": 1000, "rate_fp
 CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
 
         return prompt
-1. HEADING_CHANGE: Turn left or right by specified degrees
-2. ALTITUDE_CHANGE: Climb or descend to specified flight level
-3. SPEED_CHANGE: Adjust speed within aircraft performance limits
-4. WAYPOINT_DIRECT: Navigate direct to specified waypoint (if available)
-
-WAYPOINT DIRECT OPTION:
-- You may instruct ownship to go DIRECT to a named fix within {max_waypoint_diversion} NM.
-- Nearby fixes you may choose (prefer these to avoid hallucination):
-{suggest_txt}
-
-OUTPUT FORMAT (JSON only, no additional text):
-{{
-    "action": "turn|climb|descend|waypoint",
-    "params": {{
-        "heading_deg": float,         // For turn: new absolute heading (0-359)
-        "heading_delta_deg": float,   // Alternative: relative change amount
-        "turn_direction": "left|right", // Turn direction
-        "new_altitude_ft": float,     // For climb/descend: new absolute altitude
-        "altitude_change_ft": float,  // Alternative: relative change amount
-        "delta_ft": float,            // Alternative: relative change amount
-        "new_speed_kt": float,        // For speed change: new absolute speed
-        "speed_delta_kt": float,      // Alternative: relative change amount
-        "waypoint_name": "string"     // For waypoint: name of target fix (REQUIRED if action == "waypoint")
-    }},
-    "reason": "Clear explanation of resolution strategy"
-}}
-
-EXAMPLES:
-Heading change: {{"action": "turn", "params": {{"heading_deg": 270}}, "reason": "Turn left 30° to avoid traffic"}}
-Waypoint direct: {{"action": "waypoint", "params": {{"waypoint_name": "BOKSU"}}, "reason": "Direct to BOKSU for efficient separation"}}
-Altitude change: {{"action": "altitude", "params": {{"new_altitude_ft": 7000, "rate_fpm": 1000}}, "reason": "Climb to FL070 at 1000 fpm"}}
-Speed reduction: {{"action": "speed", "params": {{"new_speed_kt": 180}}, "reason": "Reduce speed to 180 knots for spacing"}}
-Combined maneuver: {{"action": "combined", "params": {{"heading_deg": 90, "new_altitude_ft": 8000, "rate_fpm": 1500}}, "reason": "Turn right to 090 and climb to FL080"}}
-Hold pattern: {{"action": "hold", "params": {{"waypoint_name": "NAVID", "hold_min": 5}}, "reason": "Hold at NAVID for 5 minutes for traffic sequencing"}}
-
-CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
-
-        return prompt
 
     def _format_aircraft_state(self, aircraft, label: str) -> str:
         """Format aircraft state for prompt clarity."""

@@ -275,6 +275,12 @@ class ConfigurationSettings(BaseSettings):
     fast_time: bool = Field(True, description="If True, do not wall-sleep; advance sim time only")
     sim_accel_factor: float = Field(1.0, gt=0, description="Multiply simulated step length per cycle")
     
+    # Enhanced features
+    memory_file: Optional[Path] = Field(None, description="Path to LLM memory file for persistent learning")
+    failure_analysis_file: Optional[Path] = Field(None, description="Path to failure analysis output file")
+    enable_visualization: bool = Field(False, description="Enable visualization components")
+    seed: Optional[int] = Field(None, description="Random seed for reproducible simulations")
+    
     class Config:
         """Pydantic configuration."""
         env_prefix = "ATC_LLM_"

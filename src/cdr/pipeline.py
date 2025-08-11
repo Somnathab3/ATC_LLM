@@ -1767,6 +1767,9 @@ Provide your resolution as JSON with fields: resolution_type (either "heading" o
             # Initialize intruder spawning scheduler
             spawned_intruders = set()  # Track which intruders have been spawned
             pending_intruders = list(scenario.intruder_states)  # Intruders to spawn
+            logger.info(f"Starting simulation with {len(pending_intruders)} intruders to spawn")
+            for i, intruder in enumerate(pending_intruders):
+                logger.info(f"  Intruder {i+1}: {intruder.aircraft_id}, spawn at t={intruder.spawn_offset_min:.1f} min")
             simulation_time_min = 0.0  # Track simulation time
             
             # Analyze flight path for intrusion detection
@@ -1787,7 +1790,7 @@ Provide your resolution as JSON with fields: resolution_type (either "heading" o
                     if success:
                         spawned_intruders.add(intruder.aircraft_id)
                         pending_intruders.remove(intruder)
-                        logger.info(f"Spawned {intruder.aircraft_id} at t={simulation_time_min:.1f} min")
+                        logger.info(f"Spawned {intruder.aircraft_id} at t={simulation_time_min:.1f} min - Position: ({intruder.latitude:.4f}, {intruder.longitude:.4f}), Alt: {intruder.altitude_ft:.0f} ft")
                     else:
                         logger.warning(f"Failed to spawn {intruder.aircraft_id} at t={simulation_time_min:.1f} min")
                 
