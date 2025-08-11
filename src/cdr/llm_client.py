@@ -580,7 +580,7 @@ Heading change: {{"action": "turn", "params": {{"heading_deg": 270}}, "reason": 
 Waypoint direct: {{"action": "waypoint", "params": {{"waypoint_name": "BOKSU"}}, "reason": "Direct to BOKSU for efficient separation"}}
 Altitude change: {{"action": "altitude", "params": {{"new_altitude_ft": 7000, "rate_fpm": 1000}}, "reason": "Climb to FL070 at 1000 fpm"}}
 Speed reduction: {{"action": "speed", "params": {{"new_speed_kt": 180}}, "reason": "Reduce speed to 180 knots for spacing"}}
-Combined maneuver: {{"action": "combined", "params": {{"heading_deg": 090, "new_altitude_ft": 8000, "rate_fpm": 1500}}, "reason": "Turn right to 090 and climb to FL080"}}
+Combined maneuver: {{"action": "combined", "params": {{"heading_deg": 90, "new_altitude_ft": 8000, "rate_fpm": 1500}}, "reason": "Turn right to 090 and climb to FL080"}}
 Hold pattern: {{"action": "hold", "params": {{"waypoint_name": "NAVID", "hold_min": 5}}, "reason": "Hold at NAVID for 5 minutes for traffic sequencing"}}
 
 CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
@@ -591,21 +591,31 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
         """Format aircraft state for prompt clarity."""
         if hasattr(aircraft, 'aircraft_id'):
             # It's an AircraftState object
-            return f"""{label}:
-- Aircraft ID: {aircraft.aircraft_id}
-- Position: {aircraft.latitude:.6f}degN, {aircraft.longitude:.6f}degE
-- Altitude: {aircraft.altitude_ft:.0f} feet
-- Heading: {aircraft.heading_deg:.0f}deg True
-- Ground Speed: {aircraft.ground_speed_kt:.0f} knots
-- Timestamp: {aircraft.timestamp}"""
+            lat = aircraft.latitude
+            lon = aircraft.longitude
+            alt = aircraft.altitude_ft
+            hdg = aircraft.heading_deg
+            spd = aircraft.ground_speed_kt
+            return (f"{label}:\n"
+                   f"- Aircraft ID: {aircraft.aircraft_id}\n"
+                   f"- Position: {lat:.6f}degN, {lon:.6f}degE\n"
+                   f"- Altitude: {alt:.0f} feet\n"
+                   f"- Heading: {hdg:.0f}deg True\n"
+                   f"- Ground Speed: {spd:.0f} knots\n"
+                   f"- Timestamp: {aircraft.timestamp}")
         elif isinstance(aircraft, dict):
             # It's a dict
-            return f"""{label}:
-- Aircraft ID: {aircraft.get('aircraft_id', 'UNKNOWN')}
-- Position: {aircraft.get('lat', 0.0):.6f}degN, {aircraft.get('lon', 0.0):.6f}degE
-- Altitude: {aircraft.get('alt_ft', 0.0):.0f} feet
-- Heading: {aircraft.get('hdg_deg', 0.0):.0f}deg True
-- Ground Speed: {aircraft.get('spd_kt', 0.0):.0f} knots"""
+            lat = aircraft.get('lat', 0.0)
+            lon = aircraft.get('lon', 0.0)
+            alt = aircraft.get('alt_ft', 0.0)
+            hdg = aircraft.get('hdg_deg', 0.0)
+            spd = aircraft.get('spd_kt', 0.0)
+            return (f"{label}:\n"
+                   f"- Aircraft ID: {aircraft.get('aircraft_id', 'UNKNOWN')}\n"
+                   f"- Position: {lat:.6f}degN, {lon:.6f}degE\n"
+                   f"- Altitude: {alt:.0f} feet\n"
+                   f"- Heading: {hdg:.0f}deg True\n"
+                   f"- Ground Speed: {spd:.0f} knots")
         else:
             return f"{label}: {aircraft}"
 
@@ -625,7 +635,7 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
             ownship_state: Current ownship aircraft state
             intruder_state: Conflicting intruder state
             prompt: LLM prompt that was used
-            llm_output: LLM's response
+            llm_output: LLM response
             command: BlueSky command that was executed
             cpa_result: CPA computation result
             outcome: "pass" or "fail" based on verification
@@ -1325,7 +1335,7 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
                 "heading_delta_deg": 10.0,
                 "turn_direction": "right"
             },
-            "bluesky_command": "UNKNOWN HDG 010",
+            "bluesky_command": "UNKNOWN HDG 10",
             "rationale": "Fallback: LLM response parsing failed, applying safe turn",
             "confidence": 0.1,
             "expected_separation_improvement": 1.0,
@@ -1371,7 +1381,7 @@ CRITICAL: Return only valid JSON. No explanations outside the JSON structure."""
         defaults = {
             'action': 'HEADING_CHANGE',
             'params': {},
-            'bluesky_command': 'UNKNOWN HDG 010',
+            'bluesky_command': 'UNKNOWN HDG 10',
             'rationale': 'Default: missing field'
         }
         return defaults.get(field, None)
