@@ -19,43 +19,6 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
 try:
-    from tqdm import tqdm
-    TQDM_AVAILABLE = True
-except ImportError:
-    # Fallback tqdm implementation for minimal functionality
-    class tqdm:
-        def __init__(self, iterable=None, desc=None, unit=None, leave=True, total=None):
-            self.iterable = iterable
-            self.desc = desc or ""
-            self.unit = unit or "it"
-            self.leave = leave
-            self.total = total or (len(iterable) if iterable and hasattr(iterable, '__len__') else None)
-            self.n = 0
-            if self.desc:
-                logging.info(f"[{self.desc}] Starting processing{f' ({self.total} {self.unit})' if self.total else ''}...")
-        
-        def __iter__(self):
-            if self.iterable:
-                for item in self.iterable:
-                    yield item
-                    self.n += 1
-                    if self.n % max(1, (self.total or 10) // 10) == 0:  # Log every 10%
-                        progress = f" ({self.n}/{self.total})" if self.total else f" ({self.n})"
-                        logging.info(f"[{self.desc}] Progress{progress}")
-                if self.desc:
-                    logging.info(f"[{self.desc}] Completed ({self.n} {self.unit})")
-            return self
-        
-        def __enter__(self):
-            return self
-        
-        def __exit__(self, exc_type, exc_val, exc_tb):
-            pass
-    
-    TQDM_AVAILABLE = False
-    logging.warning("tqdm not available. Using fallback progress reporting.")
-
-try:
     from scipy.spatial import KDTree
     import numpy as np
     SCIPY_AVAILABLE = True
@@ -499,7 +462,7 @@ class SCATAdapter:
         intruder_ids = set()  # Track unique aircraft IDs to avoid duplicates
         
         # For each ownship position, find vicinity aircraft
-        for ownship_state in tqdm(ownship_states, desc="Processing vicinity", unit="state", leave=False):
+        for ownship_state in ownship_states:
             vicinity_aircraft = self.find_vicinity_aircraft(
                 ownship_state, vicinity_radius_nm, altitude_window_ft
             )
@@ -548,8 +511,7 @@ class SCATAdapter:
         
         # Extract callsigns from flight files
         callsigns = []
-        file_subset = self.flight_files[:100]  # Limit to first 100 for performance
-        for flight_file in tqdm(file_subset, desc="SCAT files", unit="file", leave=False):
+        for flight_file in self.flight_files[:100]:  # Limit to first 100 for performance
             try:
                 flight_record = self.load_flight_record(flight_file)
                 if flight_record and flight_record.callsign != 'UNKNOWN':
@@ -735,8 +697,7 @@ class SCATAdapter:
         
         logger.info(f"Loading scenario with up to {max_flights} flights...")
         
-        file_subset = self.flight_files[:max_flights]
-        for flight_file in tqdm(file_subset, desc="Loading flights", unit="flight"):
+        for flight_file in self.flight_files[:max_flights]:
             flight_record = self.load_flight_record(flight_file)
             if not flight_record:
                 continue
